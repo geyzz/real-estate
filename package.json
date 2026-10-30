@@ -10,6 +10,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.118.0",
+    "phil-reg-prov-mun-brgy": "^1.1.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   },
