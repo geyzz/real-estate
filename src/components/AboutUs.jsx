@@ -1,6 +1,8 @@
 import aboutBg from '../assets/about-bg.jpg'
 
-export default function AboutUs() {
+export default function AboutUs({ properties = [] }) {
+  const activeCount = properties.length
+
   return (
     <section
       className='abt-page'
@@ -18,18 +20,20 @@ export default function AboutUs() {
           </p>
           <div className='abt-stats-row'>
             <div className='abt-stat-item'>
-              <span className='abt-stat-val'>18+</span>
-              <span className='abt-stat-lbl'>Hectares Curated</span>
-            </div>
-            <div className='abt-stat-divider'></div>
-            <div className='abt-stat-item'>
               <span className='abt-stat-val'>100%</span>
               <span className='abt-stat-lbl'>Clean Titles</span>
             </div>
             <div className='abt-stat-divider'></div>
             <div className='abt-stat-item'>
-              <span className='abt-stat-val'>2</span>
-              <span className='abt-stat-lbl'>Key Provinces</span>
+              <span className='abt-stat-val'>Direct</span>
+              <span className='abt-stat-lbl'>Owner Deals</span>
+            </div>
+            <div className='abt-stat-divider'></div>
+            <div className='abt-stat-item'>
+              <span className='abt-stat-val'>{activeCount > 0 ? activeCount : 'Prime'}</span>
+              <span className='abt-stat-lbl'>
+                {activeCount === 1 ? 'Active Property' : 'Active Properties'}
+              </span>
             </div>
           </div>
         </div>

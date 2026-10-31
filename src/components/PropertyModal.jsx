@@ -1,3 +1,5 @@
+import { formatLocation, toTitleCase } from '../lib/philippineGeo'
+
 export default function PropertyModal({ property, onClose, onInquire }) {
   if (!property) return null
 
@@ -23,26 +25,32 @@ export default function PropertyModal({ property, onClose, onInquire }) {
             <img
               className='prop-modal-img'
               src={property.image}
-              alt={property.location}
+              alt={formatLocation(property.location)}
             />
-            <span className='prop-modal-badge'>{property.badge || property.label || 'Clean Title'}</span>
-            <span className='prop-modal-province'>{property.province}</span>
+            {(property.badge || property.label) && (
+              <span className='prop-modal-badge'>{property.badge || property.label}</span>
+            )}
+            {property.province && <span className='prop-modal-province'>{toTitleCase(property.province)}</span>}
           </div>
           <div className='prop-modal-info-col'>
             <div className='prop-modal-header'>
               <span className='prop-modal-eyebrow'>Property Overview</span>
-              <h3 id='modal-title'>{property.location}</h3>
-              <p className='prop-modal-sub'>{property.subtitle || property.main_info}</p>
+              <h3 id='modal-title'>{formatLocation(property.location)}</h3>
+              {Boolean(property.subtitle || property.main_info) && (
+                <p className='prop-modal-sub'>{property.subtitle || property.main_info}</p>
+              )}
             </div>
 
-            <div className='prop-modal-specs-box'>
-              <h4>Dimensions and Features</h4>
-              <p>{property.specs || property.sub_info}</p>
-            </div>
+            {Boolean(property.specs || property.sub_info) && (
+              <div className='prop-modal-specs-box'>
+                <h4>Dimensions and Features</h4>
+                <p>{property.specs || property.sub_info}</p>
+              </div>
+            )}
 
-            <div className='prop-modal-highlights'>
-              {property.sub_labels && property.sub_labels.length > 0 ? (
-                property.sub_labels.map((sub, idx) => (
+            {property.sub_labels && property.sub_labels.length > 0 && (
+              <div className='prop-modal-highlights'>
+                {property.sub_labels.map((sub, idx) => (
                   <div key={idx} className='prop-modal-chip'>
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
@@ -50,39 +58,16 @@ export default function PropertyModal({ property, onClose, onInquire }) {
                     </svg>
                     {typeof sub === 'string' ? sub : sub.text}
                   </div>
-                ))
-              ) : (
-                <>
-                  <div className='prop-modal-chip'>
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-                      <polyline points="9 12 11 14 15 10" />
-                    </svg>
-                    Clean Title Verified
-                  </div>
-                  <div className='prop-modal-chip'>
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21" />
-                    </svg>
-                    Wide Road Access
-                  </div>
-                  <div className='prop-modal-chip'>
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <circle cx="12" cy="12" r="10" />
-                      <polyline points="12 6 12 12 16 14" />
-                    </svg>
-                    Direct Owner Negotiation
-                  </div>
-                </>
-              )}
-            </div>
+                ))}
+              </div>
+            )}
 
             <div className='prop-modal-price-box'>
               <div className='prop-modal-price-details'>
                 <span className='prop-modal-price-label'>Listing Price</span>
                 <span className='prop-modal-price-val'>{property.price || property.price_display}</span>
               </div>
-              <span className='prop-modal-neg'>{property.terms || 'Terms Negotiable'}</span>
+              {property.terms && <span className='prop-modal-neg'>{property.terms}</span>}
             </div>
 
             <div className='prop-modal-actions'>

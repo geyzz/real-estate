@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import {
   getProvinces,
   getMunicipalities,
@@ -11,18 +11,148 @@ import {
   addProperty,
   updateProperty,
   deleteProperty,
+  isSupabaseConfigured,
 } from '../lib/supabase'
 
 const STANDARD_HIGHLIGHTS = [
   'Clean Title Verified',
   'Wide Road Access',
   'Direct Owner Negotiation',
-  'Near San Basilio School',
   'Near Main Highway',
   'Electric & Water Ready',
   'Fishpond & Resthouse',
   'Fenced Perimeter',
 ]
+
+// Formatting helper: Title Case for Province, Municipality, Barangay names
+const toTitleCase = (str) => {
+  if (!str) return ''
+  return String(str)
+    .toLowerCase()
+    .replace(/(?:^|\s|-|\/)\S/g, (match) => match.toUpperCase())
+}
+
+// Formatting helper: cleanly split tags joined by ' • ' or comma
+const parseChips = (val) => {
+  if (!val) return []
+  if (Array.isArray(val)) {
+    return val.map((v) => (typeof v === 'string' ? v : v.text || '')).map((s) => s.trim()).filter(Boolean)
+  }
+  return String(val)
+    .split(/\s*•\s*/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+}
+
+// Custom Searchable Combobox: single-click opens dropdown, live search as you type, and accepts custom input
+function SearchableCombobox({
+  label,
+  sublabel = '(Click for list or type custom)',
+  value = '',
+  onChange,
+  options = [],
+  placeholder = 'Select or type...',
+  required = false,
+}) {
+  const [isOpen, setIsOpen] = useState(false)
+  const wrapperRef = useRef(null)
+
+  const filteredOptions = useMemo(() => {
+    if (!value || !value.trim()) return options
+    const query = value.trim().toLowerCase()
+    return options.filter((opt) => {
+      const text = typeof opt === 'string' ? opt : opt.name || opt.label || ''
+      return text.toLowerCase().includes(query)
+    })
+  }, [options, value])
+
+  useEffect(() => {
+    const handleOutside = (e) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target)) {
+        setIsOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleOutside)
+    return () => document.removeEventListener('mousedown', handleOutside)
+  }, [])
+
+  return (
+    <div className='admin-field-group admin-combobox-wrapper' ref={wrapperRef}>
+      <label>
+        {label} <span className='admin-field-sublabel'>{sublabel}</span>
+      </label>
+      <div className='admin-combobox-input-row'>
+        <input
+          type='text'
+          value={value}
+          onChange={(e) => {
+            onChange(e.target.value)
+            setIsOpen(true)
+          }}
+          onFocus={() => setIsOpen(true)}
+          onClick={() => setIsOpen(true)}
+          placeholder={placeholder}
+          className='admin-input admin-custom-combobox-input'
+          required={required}
+        />
+        <button
+          type='button'
+          className={`admin-combobox-toggle-btn ${isOpen ? 'is-open' : ''}`}
+          onClick={(e) => {
+            e.stopPropagation()
+            setIsOpen((prev) => !prev)
+          }}
+          title='Toggle options'
+          tabIndex={-1}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </button>
+      </div>
+
+      {isOpen && (
+        <div className='admin-combobox-menu'>
+          {filteredOptions.length > 0 ? (
+            <div className='admin-combobox-options-list'>
+              {filteredOptions.map((opt) => {
+                const optText = typeof opt === 'string' ? opt : opt.name || opt.label
+                const isSelected = value && value.trim().toLowerCase() === optText.trim().toLowerCase()
+                return (
+                  <button
+                    key={optText}
+                    type='button'
+                    className={`admin-combobox-item ${isSelected ? 'is-selected' : ''}`}
+                    onClick={() => {
+                      onChange(optText)
+                      setIsOpen(false)
+                    }}
+                  >
+                    <span>{optText}</span>
+                    {isSelected && <span className='admin-combobox-check'>✓</span>}
+                  </button>
+                )
+              })}
+            </div>
+          ) : (
+            <div className='admin-combobox-empty'>
+              <span>No match found in list.</span>
+              {value && value.trim() && (
+                <button
+                  type='button'
+                  className='admin-combobox-custom-confirm-btn'
+                  onClick={() => setIsOpen(false)}
+                >
+                  Use custom: <strong>"{value}"</strong>
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
 
 export default function AdminPortal({
   isOpen,
@@ -39,7 +169,7 @@ export default function AdminPortal({
   const [loginError, setLoginError] = useState('')
   const [deletingId, setDeletingId] = useState(null)
 
-  // Form State
+  // Form State - Truly clean initial states (no defaults)
   const [formId, setFormId] = useState(null)
   const [selectedProvCode, setSelectedProvCode] = useState('')
   const [selectedMunCode, setSelectedMunCode] = useState('')
@@ -59,28 +189,23 @@ export default function AdminPortal({
   const [subInfoInput, setSubInfoInput] = useState('')
   const [subInfoTags, setSubInfoTags] = useState([])
 
-  // Price & Terms
-  const [listingPrice, setListingPrice] = useState(1500)
-  const [terms, setTerms] = useState('Negotiable')
+  // Price & Terms - Clean defaults
+  const [listingPrice, setListingPrice] = useState('')
+  const [terms, setTerms] = useState('')
 
-  // Feature Highlights
-  const [selectedHighlights, setSelectedHighlights] = useState([
-    'Clean Title Verified',
-    'Wide Road Access',
-    'Direct Owner Negotiation',
-  ])
+  // Feature Highlights - Clean defaults
+  const [selectedHighlights, setSelectedHighlights] = useState([])
   const [customHighlights, setCustomHighlights] = useState([])
-  const [customTagInputTop, setCustomTagInputTop] = useState('')
-  const [customTagInputBottom, setCustomTagInputBottom] = useState('')
+  const [customTagInput, setCustomTagInput] = useState('')
 
-  // Showcase Photograph state
-  const [selectedImageKey, setSelectedImageKey] = useState('property4')
+  // Showcase Photograph state - Preset 1 selected by default, presets safely preserved
+  const [selectedImageKey, setSelectedImageKey] = useState('property1')
   const [customImageData, setCustomImageData] = useState('')
   const [presetAltTexts, setPresetAltTexts] = useState({
     property1: 'Preset 1',
     property2: 'Preset 2',
     property3: 'Preset 3',
-    property4: 'Preset 4 (Porac / Pulong)',
+    property4: 'Preset 4',
   })
 
   // Geo options
@@ -122,85 +247,71 @@ export default function AdminPortal({
     showToast('Signed out of admin')
   }
 
-  // Set up form to default for a fresh lot (Pampanga / Porac / Pulong Santol ready for user test)
+  // Set up form for a fresh property (completely clean & empty)
   const initAddForm = () => {
     setFormId(null)
     setLabelInput('')
-    setLabelTags(['Clean Title'])
+    setLabelTags([])
 
     setMainInfoInput('')
-    setMainInfoTags(['10 Hectares • 101,618 SQM'])
+    setMainInfoTags([])
 
     setSubInfoInput('')
-    setSubInfoTags(['90m W × 1.2km L • Near San Basilio School'])
+    setSubInfoTags([])
 
-    setListingPrice(1500)
-    setTerms('Negotiable')
+    setListingPrice('')
+    setTerms('')
 
-    setSelectedHighlights([
-      'Clean Title Verified',
-      'Wide Road Access',
-      'Direct Owner Negotiation',
-    ])
+    setSelectedHighlights([])
     setCustomHighlights([])
-    setCustomTagInputTop('')
-    setCustomTagInputBottom('')
+    setCustomTagInput('')
 
-    setSelectedImageKey('property4')
+    setSelectedImageKey('property1')
     setCustomImageData('')
 
-    // Set to Pampanga -> Porac -> Pulong Santol as default
-    const pCode = findProvinceCodeByName('PAMPANGA') || '0354'
-    setSelectedProvCode(pCode)
-    setProvinceName('PAMPANGA')
-
-    const muns = getMunicipalities(pCode)
-    setMunicipalitiesList(muns)
-
-    const poracCode = findMunicipalityCodeByName('PORAC', pCode) || (muns[0] ? muns[0].mun_code : '')
-    setSelectedMunCode(poracCode)
-    setMunicipalityName('Porac')
-
-    if (poracCode) {
-      const brgys = getBarangays(poracCode)
-      setBarangaysList(brgys)
-      const pulong = brgys.find((b) => b.name.toLowerCase().includes('pulong'))
-      setSelectedBarangay(pulong ? pulong.name : brgys[0]?.name || '')
-    }
+    setSelectedProvCode('')
+    setProvinceName('')
+    setSelectedMunCode('')
+    setMunicipalityName('')
+    setSelectedBarangay('')
+    setMunicipalitiesList([])
+    setBarangaysList([])
 
     setViewMode('form')
   }
 
-  // Populate form with existing property for editing
+  // Populate form with existing property for editing (parse chips & accurate casing)
   const initEditForm = (prop) => {
     setFormId(prop.id)
 
     // Label tags
-    const rawLabel = prop.badge || prop.label || 'Clean Title'
-    setLabelTags(rawLabel ? [rawLabel] : [])
+    const rawLabel = prop.badge || prop.label || ''
+    setLabelTags(parseChips(rawLabel))
     setLabelInput('')
 
     // Main info tags
     const rawMain = prop.main_info || prop.subtitle || ''
-    setMainInfoTags(rawMain ? [rawMain] : [])
+    setMainInfoTags(parseChips(rawMain))
     setMainInfoInput('')
 
     // Sub info tags
     const rawSub = prop.sub_info || prop.specs || ''
-    setSubInfoTags(rawSub ? [rawSub] : [])
+    setSubInfoTags(parseChips(rawSub))
     setSubInfoInput('')
 
-    setListingPrice(prop.listing_price || 1500)
-    setTerms(prop.terms || 'Negotiable')
+    setListingPrice(prop.listing_price || '')
+    setTerms(prop.terms || '')
 
     // Highlights
-    if (prop.sub_labels && Array.isArray(prop.sub_labels)) {
-      const names = prop.sub_labels.map((s) => (typeof s === 'string' ? s : s.text))
+    if (prop.sub_labels && Array.isArray(prop.sub_labels) && prop.sub_labels.length > 0) {
+      const names = prop.sub_labels.map((s) => (typeof s === 'string' ? s : s.text)).filter(Boolean)
       setSelectedHighlights(names)
+    } else {
+      setSelectedHighlights([])
     }
 
     // Image
-    setSelectedImageKey(prop.imageKey || 'property4')
+    setSelectedImageKey(prop.imageKey || 'property1')
     if (typeof prop.image === 'string' && (prop.image.startsWith('data:') || prop.image.startsWith('http'))) {
       setCustomImageData(prop.image)
     } else {
@@ -208,63 +319,83 @@ export default function AdminPortal({
     }
 
     // Geo resolution
-    const provName = prop.province || 'PAMPANGA'
-    setProvinceName(provName)
-    const pCode = findProvinceCodeByName(provName) || '0354'
-    setSelectedProvCode(pCode)
+    const provName = prop.province || ''
+    setProvinceName(provName ? toTitleCase(provName) : '')
+    const pCode = provName ? findProvinceCodeByName(provName) : ''
+    setSelectedProvCode(pCode || '')
 
-    const muns = getMunicipalities(pCode)
-    setMunicipalitiesList(muns)
+    if (pCode) {
+      const muns = getMunicipalities(pCode)
+      setMunicipalitiesList(muns)
+      const munName = prop.municipality || ''
+      setMunicipalityName(munName ? toTitleCase(munName) : '')
+      const mCode = munName ? findMunicipalityCodeByName(munName, pCode) : ''
+      setSelectedMunCode(mCode || '')
 
-    const munName = prop.municipality || 'Porac'
-    setMunicipalityName(munName)
-    const mCode = findMunicipalityCodeByName(munName, pCode) || (muns[0] ? muns[0].mun_code : '')
-    setSelectedMunCode(mCode)
-
-    if (mCode) {
-      const brgys = getBarangays(mCode)
-      setBarangaysList(brgys)
+      if (mCode) {
+        const brgys = getBarangays(mCode)
+        setBarangaysList(brgys)
+      } else {
+        setBarangaysList([])
+      }
+    } else {
+      setMunicipalitiesList([])
+      setBarangaysList([])
+      setMunicipalityName(prop.municipality ? toTitleCase(prop.municipality) : '')
     }
-    setSelectedBarangay(prop.barangay || 'Pulong Santol')
+    setSelectedBarangay(prop.barangay ? toTitleCase(prop.barangay) : '')
 
     setViewMode('form')
   }
 
-  // Geo cascading handlers
-  const handleProvinceChange = (e) => {
-    const pCode = e.target.value
-    setSelectedProvCode(pCode)
-    const prov = provincesList.find((p) => p.prov_code === pCode)
-    const pName = prov ? prov.name : ''
-    setProvinceName(pName)
+  // Geo cascading handlers supporting both dropdown selection & custom text input
+  const handleProvinceChange = (newVal) => {
+    const val = typeof newVal === 'object' && newVal?.target ? newVal.target.value : String(newVal || '')
+    setProvinceName(val)
 
-    const muns = getMunicipalities(pCode)
-    setMunicipalitiesList(muns)
+    // Check if what was selected or typed matches any known province in provincesList
+    const matched = provincesList.find(
+      (p) =>
+        p.name.trim().toLowerCase() === val.trim().toLowerCase() ||
+        toTitleCase(p.name).trim().toLowerCase() === val.trim().toLowerCase() ||
+        p.prov_code === val
+    )
 
-    if (muns.length > 0) {
-      const firstMun = muns[0]
-      setSelectedMunCode(firstMun.mun_code)
-      setMunicipalityName(firstMun.name)
-      const brgys = getBarangays(firstMun.mun_code)
-      setBarangaysList(brgys)
-      setSelectedBarangay(brgys[0] ? brgys[0].name : '')
+    if (matched) {
+      setSelectedProvCode(matched.prov_code)
+      setProvinceName(toTitleCase(matched.name))
+      const muns = getMunicipalities(matched.prov_code)
+      setMunicipalitiesList(muns)
     } else {
-      setSelectedMunCode('')
-      setMunicipalityName('')
-      setBarangaysList([])
-      setSelectedBarangay('')
+      setSelectedProvCode('')
     }
   }
 
-  const handleMunicipalityChange = (e) => {
-    const mCode = e.target.value
-    setSelectedMunCode(mCode)
-    const mun = municipalitiesList.find((m) => m.mun_code === mCode)
-    setMunicipalityName(mun ? mun.name : '')
+  const handleMunicipalityChange = (newVal) => {
+    const val = typeof newVal === 'object' && newVal?.target ? newVal.target.value : String(newVal || '')
+    setMunicipalityName(val)
 
-    const brgys = getBarangays(mCode)
-    setBarangaysList(brgys)
-    setSelectedBarangay(brgys[0] ? brgys[0].name : '')
+    // Check if what was selected or typed matches any known municipality
+    const matched = municipalitiesList.find(
+      (m) =>
+        m.name.trim().toLowerCase() === val.trim().toLowerCase() ||
+        toTitleCase(m.name).trim().toLowerCase() === val.trim().toLowerCase() ||
+        m.mun_code === val
+    )
+
+    if (matched) {
+      setSelectedMunCode(matched.mun_code)
+      setMunicipalityName(toTitleCase(matched.name))
+      const brgys = getBarangays(matched.mun_code)
+      setBarangaysList(brgys)
+    } else {
+      setSelectedMunCode('')
+    }
+  }
+
+  const handleBarangayChange = (newVal) => {
+    const val = typeof newVal === 'object' && newVal?.target ? newVal.target.value : String(newVal || '')
+    setSelectedBarangay(val)
   }
 
   // Label tag handlers
@@ -351,26 +482,45 @@ export default function AdminPortal({
       return
     }
 
-    const finalLabel = labelTags.length > 0 ? labelTags.join(' • ') : (labelInput.trim() || 'Clean Title')
-    const finalMainInfo = mainInfoTags.length > 0 ? mainInfoTags.join(' • ') : (mainInfoInput.trim() || 'Prime Estate Lot')
-    const finalSubInfo = subInfoTags.length > 0 ? subInfoTags.join(' • ') : subInfoInput.trim()
+    // Incorporate any uncommitted input currently in the fields
+    const allLabels = [...labelTags]
+    if (labelInput.trim() && !allLabels.includes(labelInput.trim())) {
+      allLabels.push(labelInput.trim())
+    }
 
-    const formattedPrice = `₱${Number(listingPrice || 0).toLocaleString('en-US', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })} / SQM`
+    const allMain = [...mainInfoTags]
+    if (mainInfoInput.trim() && !allMain.includes(mainInfoInput.trim())) {
+      allMain.push(mainInfoInput.trim())
+    }
 
-    const locationStr = `${selectedBarangay}, ${municipalityName}, ${provinceName}`
+    const allSub = [...subInfoTags]
+    if (subInfoInput.trim() && !allSub.includes(subInfoInput.trim())) {
+      allSub.push(subInfoInput.trim())
+    }
+
+    const finalLabel = allLabels.join(' • ')
+    const finalMainInfo = allMain.join(' • ')
+    const finalSubInfo = allSub.join(' • ')
+
+    const cleanPrice = listingPrice ? Number(listingPrice) : 0
+    const formattedPrice = cleanPrice > 0
+      ? `₱${cleanPrice.toLocaleString('en-US')} / SQM`
+      : ''
+
+    const cleanProv = toTitleCase(provinceName)
+    const cleanMun = toTitleCase(municipalityName)
+    const cleanBrgy = toTitleCase(selectedBarangay)
+    const locationStr = `${cleanBrgy}, ${cleanMun}, ${cleanProv}`
 
     const chosenImage =
       selectedImageKey === 'custom' && customImageData
         ? customImageData
-        : PRESET_IMAGES[selectedImageKey] || PRESET_IMAGES.property4
+        : PRESET_IMAGES[selectedImageKey] || PRESET_IMAGES.property1
 
     const propertyPayload = {
-      province: provinceName,
-      municipality: municipalityName,
-      barangay: selectedBarangay,
+      province: cleanProv,
+      municipality: cleanMun,
+      barangay: cleanBrgy,
       badge: finalLabel,
       label: finalLabel,
       location: locationStr,
@@ -378,10 +528,10 @@ export default function AdminPortal({
       main_info: finalMainInfo,
       specs: finalSubInfo,
       sub_info: finalSubInfo,
-      listing_price: Number(listingPrice),
+      listing_price: cleanPrice,
       price: formattedPrice,
       price_display: formattedPrice,
-      terms: terms.trim() || 'Negotiable',
+      terms: terms.trim(),
       imageKey: selectedImageKey,
       image: chosenImage,
       sub_labels: selectedHighlights.map((txt) => ({ text: txt, icon: 'shield' })),
@@ -533,8 +683,16 @@ export default function AdminPortal({
               </button>
             </div>
 
-            <div className='admin-table-info-row'>
-              <span>Showing <strong>{filteredTableProps.length}</strong> active listing(s) in database</span>
+            <div className='admin-table-info-row' style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+              <span>
+                Showing <strong>{filteredTableProps.length}</strong> active listing(s){' '}
+                {isSupabaseConfigured() ? 'in Supabase Database' : '(Saved in Browser Local Storage)'}
+              </span>
+              {!isSupabaseConfigured() && (
+                <span className='admin-supabase-warning-pill' title='Supabase Anon Key is not set in .env yet'>
+                  ⚠️ Supabase Not Connected (Add Anon Key)
+                </span>
+              )}
             </div>
 
             <div className='admin-table-responsive'>
@@ -554,7 +712,9 @@ export default function AdminPortal({
                   {filteredTableProps.length === 0 ? (
                     <tr>
                       <td colSpan={7} className='admin-table-empty'>
-                        No properties found matching your search.
+                        {properties.length === 0
+                          ? 'No properties in database yet. Click "+ Add Property" to create your first listing.'
+                          : 'No properties found matching your search.'}
                       </td>
                     </tr>
                   ) : (
@@ -563,31 +723,44 @@ export default function AdminPortal({
                         <td>
                           <img
                             src={prop.image}
-                            alt={prop.location}
+                            alt={prop.location || 'Property'}
                             className='admin-table-thumb'
                           />
                         </td>
                         <td>
                           <div className='admin-cell-location'>
-                            <strong>{prop.barangay || prop.location}</strong>
-                            <span>{prop.municipality ? `${prop.municipality}, ${prop.province}` : prop.location}</span>
+                            <strong>{toTitleCase(prop.barangay || prop.location || '—')}</strong>
+                            <span>
+                              {prop.municipality && prop.province
+                                ? `${toTitleCase(prop.municipality)}, ${toTitleCase(prop.province)}`
+                                : (prop.barangay ? '' : toTitleCase(prop.location))}
+                            </span>
                           </div>
                         </td>
                         <td>
-                          <span className='admin-table-badge'>
-                            {prop.badge || prop.label || 'Clean Title'}
-                          </span>
+                          {prop.badge || prop.label ? (
+                            <span className='admin-table-badge'>
+                              {prop.badge || prop.label}
+                            </span>
+                          ) : (
+                            <span className='admin-cell-empty'>—</span>
+                          )}
                         </td>
                         <td>
-                          <span className='admin-cell-text'>{prop.main_info || prop.subtitle}</span>
+                          <span className='admin-cell-text'>{prop.main_info || prop.subtitle || '—'}</span>
                         </td>
                         <td>
-                          <span className='admin-cell-text admin-cell-sub'>{prop.sub_info || prop.specs}</span>
+                          <span className='admin-cell-text admin-cell-sub'>{prop.sub_info || prop.specs || '—'}</span>
                         </td>
                         <td>
-                          <span className='admin-cell-price'>
-                            {prop.price || prop.price_display}
-                          </span>
+                          <div className='admin-cell-price-block'>
+                            <span className='admin-cell-price'>
+                              {prop.price || (prop.listing_price ? `₱${Number(prop.listing_price).toLocaleString()} / SQM` : '—')}
+                            </span>
+                            {prop.terms && (
+                              <span className='admin-cell-terms'>{prop.terms}</span>
+                            )}
+                          </div>
                         </td>
                         <td>
                           <div className='admin-table-actions'>
@@ -654,62 +827,40 @@ export default function AdminPortal({
             </div>
 
             <form onSubmit={handleSaveProperty} className='admin-prop-form'>
-              {/* 1. Cascading Location: Province, Municipal/City, Barangay */}
+              {/* 1. Cascading Location: Province, Municipal/City, Barangay (Custom Combobox with Single-Click Open) */}
               <div className='admin-form-section'>
                 <h3 className='admin-section-title'>1. Property Location</h3>
+                <p className='admin-section-desc'>
+                  Click once to open the dropdown list or type your own custom location if you can't find it.
+                </p>
+
                 <div className='admin-geo-grid'>
-                  <div className='admin-field-group'>
-                    <label>Province</label>
-                    <select
-                      value={selectedProvCode}
-                      onChange={handleProvinceChange}
-                      className='admin-select'
-                      required
-                    >
-                      <option value=''>-- Select Province --</option>
-                      {provincesList.map((p) => (
-                        <option key={p.prov_code} value={p.prov_code}>
-                          {p.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                  <SearchableCombobox
+                    label='Province'
+                    value={provinceName}
+                    onChange={handleProvinceChange}
+                    options={provincesList.map((p) => toTitleCase(p.name))}
+                    placeholder='Select or type province...'
+                    required
+                  />
 
-                  <div className='admin-field-group'>
-                    <label>Municipal / City</label>
-                    <select
-                      value={selectedMunCode}
-                      onChange={handleMunicipalityChange}
-                      className='admin-select'
-                      disabled={!selectedProvCode || municipalitiesList.length === 0}
-                      required
-                    >
-                      <option value=''>-- Select Municipality / City --</option>
-                      {municipalitiesList.map((m) => (
-                        <option key={m.mun_code} value={m.mun_code}>
-                          {m.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                  <SearchableCombobox
+                    label='Municipal / City'
+                    value={municipalityName}
+                    onChange={handleMunicipalityChange}
+                    options={municipalitiesList.map((m) => toTitleCase(m.name))}
+                    placeholder='Select or type town / city...'
+                    required
+                  />
 
-                  <div className='admin-field-group'>
-                    <label>Barangay</label>
-                    <select
-                      value={selectedBarangay}
-                      onChange={(e) => setSelectedBarangay(e.target.value)}
-                      className='admin-select'
-                      disabled={!selectedMunCode || barangaysList.length === 0}
-                      required
-                    >
-                      <option value=''>-- Select Barangay --</option>
-                      {barangaysList.map((b) => (
-                        <option key={b.name} value={b.name}>
-                          {b.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                  <SearchableCombobox
+                    label='Barangay / Sitio'
+                    value={selectedBarangay}
+                    onChange={handleBarangayChange}
+                    options={barangaysList.map((b) => toTitleCase(b.name))}
+                    placeholder='Select or type barangay / sitio...'
+                    required
+                  />
                 </div>
 
                 <div className='admin-location-pill-summary'>
@@ -871,21 +1022,28 @@ export default function AdminPortal({
               <div className='admin-form-section'>
                 <h3 className='admin-section-title'>3. Verified Feature Highlights</h3>
 
-                {/* Add custom highlight feature... Add Tag (Top) */}
+                {/* Single custom highlight feature input */}
                 <div className='admin-custom-feature-row'>
                   <input
                     type='text'
                     placeholder='Add custom highlight feature...'
-                    value={customTagInputTop}
-                    onChange={(e) => setCustomTagInputTop(e.target.value)}
+                    value={customTagInput}
+                    onChange={(e) => setCustomTagInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        handleAddCustomHighlight(customTagInput)
+                        setCustomTagInput('')
+                      }
+                    }}
                     className='admin-input'
                   />
                   <button
                     type='button'
                     className='admin-btn-add-tag'
                     onClick={() => {
-                      handleAddCustomHighlight(customTagInputTop)
-                      setCustomTagInputTop('')
+                      handleAddCustomHighlight(customTagInput)
+                      setCustomTagInput('')
                     }}
                   >
                     Add Tag
@@ -939,34 +1097,13 @@ export default function AdminPortal({
                     )
                   })}
                 </div>
-
-                {/* Add custom highlight feature... Add Tag (Bottom) */}
-                <div className='admin-custom-feature-row' style={{ marginTop: '14px' }}>
-                  <input
-                    type='text'
-                    placeholder='Add custom highlight feature...'
-                    value={customTagInputBottom}
-                    onChange={(e) => setCustomTagInputBottom(e.target.value)}
-                    className='admin-input'
-                  />
-                  <button
-                    type='button'
-                    className='admin-btn-add-tag'
-                    onClick={() => {
-                      handleAddCustomHighlight(customTagInputBottom)
-                      setCustomTagInputBottom('')
-                    }}
-                  >
-                    Add Tag
-                  </button>
-                </div>
               </div>
 
               {/* 4. Property Showcase Photograph */}
               <div className='admin-form-section'>
                 <h3 className='admin-section-title'>4. Property Showcase Photograph</h3>
                 <p className='admin-section-desc'>
-                  Choose from preset clean drone lot photos (including Property 4 for Pulong Santol) or upload your own photo.
+                  All 4 preset drone photos are kept safe and preserved. You can click <strong>"💾 Save Photo"</strong> on any preset below to download it directly to your computer.
                 </p>
 
                 <div className='admin-photograph-grid'>
@@ -977,7 +1114,7 @@ export default function AdminPortal({
                   >
                     <img src={PRESET_IMAGES.property1} alt={presetAltTexts.property1} className='admin-photo-thumb' />
                     <div className='admin-photo-footer'>
-                      <span className='admin-photo-label-title'>Preset property1</span>
+                      <span className='admin-photo-label-title'>Preset 1</span>
                       <input
                         type='text'
                         value={presetAltTexts.property1}
@@ -988,6 +1125,16 @@ export default function AdminPortal({
                         className='admin-alt-text-input'
                         title='Edit alt text for image'
                       />
+                      <a
+                        href={PRESET_IMAGES.property1}
+                        download='preset-property-1.jpg'
+                        target='_blank'
+                        rel='noreferrer'
+                        className='admin-save-photo-link'
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        💾 Save Photo
+                      </a>
                     </div>
                   </div>
 
@@ -998,7 +1145,7 @@ export default function AdminPortal({
                   >
                     <img src={PRESET_IMAGES.property2} alt={presetAltTexts.property2} className='admin-photo-thumb' />
                     <div className='admin-photo-footer'>
-                      <span className='admin-photo-label-title'>Preset property2</span>
+                      <span className='admin-photo-label-title'>Preset 2</span>
                       <input
                         type='text'
                         value={presetAltTexts.property2}
@@ -1009,6 +1156,16 @@ export default function AdminPortal({
                         className='admin-alt-text-input'
                         title='Edit alt text for image'
                       />
+                      <a
+                        href={PRESET_IMAGES.property2}
+                        download='preset-property-2.png'
+                        target='_blank'
+                        rel='noreferrer'
+                        className='admin-save-photo-link'
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        💾 Save Photo
+                      </a>
                     </div>
                   </div>
 
@@ -1019,7 +1176,7 @@ export default function AdminPortal({
                   >
                     <img src={PRESET_IMAGES.property3} alt={presetAltTexts.property3} className='admin-photo-thumb' />
                     <div className='admin-photo-footer'>
-                      <span className='admin-photo-label-title'>Preset property3</span>
+                      <span className='admin-photo-label-title'>Preset 3</span>
                       <input
                         type='text'
                         value={presetAltTexts.property3}
@@ -1030,17 +1187,27 @@ export default function AdminPortal({
                         className='admin-alt-text-input'
                         title='Edit alt text for image'
                       />
+                      <a
+                        href={PRESET_IMAGES.property3}
+                        download='preset-property-3.jpg'
+                        target='_blank'
+                        rel='noreferrer'
+                        className='admin-save-photo-link'
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        💾 Save Photo
+                      </a>
                     </div>
                   </div>
 
-                  {/* Preset 4 (Porac / Pulong Santol) */}
+                  {/* Preset 4 */}
                   <div
                     className={`admin-photo-card ${selectedImageKey === 'property4' ? 'is-selected' : ''}`}
                     onClick={() => setSelectedImageKey('property4')}
                   >
                     <img src={PRESET_IMAGES.property4} alt={presetAltTexts.property4} className='admin-photo-thumb' />
                     <div className='admin-photo-footer'>
-                      <span className='admin-photo-label-title'>Preset property4</span>
+                      <span className='admin-photo-label-title'>Preset 4</span>
                       <input
                         type='text'
                         value={presetAltTexts.property4}
@@ -1051,7 +1218,16 @@ export default function AdminPortal({
                         className='admin-alt-text-input'
                         title='Edit alt text for image'
                       />
-                      <span className='admin-porac-tag'>Porac / Pulong</span>
+                      <a
+                        href={PRESET_IMAGES.property4}
+                        download='preset-property-4.jpg'
+                        target='_blank'
+                        rel='noreferrer'
+                        className='admin-save-photo-link'
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        💾 Save Photo
+                      </a>
                     </div>
                   </div>
 
@@ -1080,6 +1256,18 @@ export default function AdminPortal({
                       <span className='admin-photo-label-title'>
                         {customImageData ? 'Custom Photo Loaded' : 'Local Photo'}
                       </span>
+                      {customImageData && (
+                        <a
+                          href={customImageData}
+                          download='custom-photo.jpg'
+                          target='_blank'
+                          rel='noreferrer'
+                          className='admin-save-photo-link'
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          💾 Save Photo
+                        </a>
+                      )}
                     </div>
                   </div>
                 </div>

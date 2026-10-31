@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { sendInquiryEmail } from '../lib/emailService'
 
 export default function Footer() {
   const [footerMsgForm, setFooterMsgForm] = useState({
@@ -7,9 +8,24 @@ export default function Footer() {
     inquiry: '',
   })
   const [footerMsgSent, setFooterMsgSent] = useState(false)
+  const [isSending, setIsSending] = useState(false)
 
-  const handleFooterMsgSubmit = (e) => {
+  const handleFooterMsgSubmit = async (e) => {
     e.preventDefault()
+    setIsSending(true)
+
+    try {
+      await sendInquiryEmail({
+        name: footerMsgForm.name.trim(),
+        email: footerMsgForm.email.trim(),
+        message: footerMsgForm.inquiry.trim(),
+        formType: 'Footer Quick Message',
+      })
+    } catch (err) {
+      console.warn('Footer message dispatch notice:', err)
+    }
+
+    setIsSending(false)
     setFooterMsgSent(true)
     setTimeout(() => {
       setFooterMsgSent(false)

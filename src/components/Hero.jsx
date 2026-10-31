@@ -1,10 +1,111 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
+import aboutBg from '../assets/about-bg.jpg'
+import { formatLocation } from '../lib/philippineGeo'
+
+// Helper to format vertical province letters for non-featured carousel cards
+// Supports 1-column (e.g. BATAAN, PAMPANGA) and balanced 2-column (e.g. AGUSAN DEL SUR, ILOCOS SUR)
+function getVerticalProvinceLetters(provinceInput) {
+  const prov = String(provinceInput || 'ESTATE').trim().toUpperCase()
+  const words = prov.split(/\s+/).filter(Boolean)
+
+  if (words.length <= 1) {
+    const chars = (words[0] || 'ESTATE').split('')
+    const isLong = chars.length > 8
+    const step = isLong ? 23 : 25
+    const startY = isLong ? 24 : 30
+    return {
+      isTwoCol: false,
+      letters: chars.map((char, i) => ({
+        char,
+        x: 50,
+        y: startY + i * step,
+      })),
+    }
+  }
+
+  // Multi-word province (e.g. "AGUSAN DEL SUR", "NUEVA ECIJA", "ILOCOS SUR")
+  // Col 1: First word (e.g. "AGUSAN") at x=50 to align with all other cards
+  // Col 2: Remaining words joined by space (e.g. "DEL SUR", retaining the space between words)
+  const col1Chars = words[0].split('')
+  const col2Chars = words.slice(1).join(' ').split('')
+
+  const maxRows = Math.max(col1Chars.length, col2Chars.length)
+  const step = maxRows > 7 ? 23 : 25
+  const startY = maxRows > 7 ? 24 : 30
+  // Column 1 aligns at x=50 (exact alignment of the other cards in the carousel)
+  const x1 = 50
+  const x2 = 80
+
+  const letters = []
+
+  // Column 1
+  col1Chars.forEach((char, row) => {
+    if (char && char.trim()) {
+      letters.push({
+        char,
+        x: x1,
+        y: startY + row * step,
+        col: 1,
+      })
+    }
+  })
+
+  // Column 2
+  col2Chars.forEach((char, row) => {
+    if (char && char.trim()) {
+      letters.push({
+        char,
+        x: x2,
+        y: startY + row * step,
+        col: 2,
+      })
+    }
+  })
+
+  return {
+    isTwoCol: true,
+    letters,
+  }
+}
 
 export default function Hero({ properties = [] }) {
-  const [activeIndex, setActiveIndex] = useState(0)
-  const [prevIndex, setPrevIndex] = useState(null)
-  const [leavingIndex, setLeavingIndex] = useState(null)
+  const propCount = properties.length
+
+  // Build virtual queue for carousel display only (never touches DB):
+  // When propCount >= 2, repeats items so there are at least 6 cards to keep the tray full
+  const virtualQueue = useMemo(() => {
+    if (propCount === 0) return []
+    if (propCount === 1) {
+      return [{ ...properties[0], virtualId: `${properties[0].id}-v0`, originalIndex: 0 }]
+    }
+
+    const minCards = 6
+    const repeatCount = Math.max(2, Math.ceil(minCards / propCount))
+    const list = []
+    for (let r = 0; r < repeatCount; r++) {
+      properties.forEach((p, idx) => {
+        list.push({
+          ...p,
+          virtualId: `${p.id}-v${r}`,
+          originalIndex: idx,
+        })
+      })
+    }
+    return list
+  }, [properties, propCount])
+
+  const virtualCount = virtualQueue.length
+
+  const [activeVirtualIndex, setActiveVirtualIndex] = useState(0)
+  const [prevVirtualIndex, setPrevVirtualIndex] = useState(null)
+  const [leavingVirtualIndex, setLeavingVirtualIndex] = useState(null)
+  const [direction, setDirection] = useState('next')
+  const [isEnteringPrev, setIsEnteringPrev] = useState(false)
   const [isPaused, setIsPaused] = useState(false)
+
+  // Spam protection lock & timer refs
+  const isTransitioningRef = useRef(false)
+  const cooldownTimerRef = useRef(null)
 
   const [expandOrigin, setExpandOrigin] = useState({
     top: '48.2%',
@@ -15,15 +116,49 @@ export default function Hero({ properties = [] }) {
     originY: '75%',
   })
 
-  const propCount = properties.length
-  const safeActiveIndex = propCount > 0 ? ((activeIndex % propCount) + propCount) % propCount : 0
-  const activeProperty = propCount > 0 ? properties[safeActiveIndex] : null
-  const prevProperty = prevIndex !== null && propCount > 0 ? properties[((prevIndex % propCount) + propCount) % propCount] : null
+  const safeVirtualActive = virtualCount > 0 ? ((activeVirtualIndex % virtualCount) + virtualCount) % virtualCount : 0
+  const realActiveIndex = virtualQueue[safeVirtualActive]?.originalIndex ?? 0
+  const activeProperty = propCount > 0 ? properties[realActiveIndex] : null
 
-  const handleSelectProperty = (propIdx, event) => {
-    if (propIdx === activeIndex) return
+  const prevRealIndex = prevVirtualIndex !== null && virtualQueue[prevVirtualIndex]
+    ? virtualQueue[prevVirtualIndex].originalIndex
+    : null
+  const prevProperty = prevRealIndex !== null && propCount > 0 ? properties[prevRealIndex] : null
 
-    if (event) {
+  // Ensure active index is always valid if properties list changes
+  useEffect(() => {
+    if (virtualCount > 0 && activeVirtualIndex >= virtualCount) {
+      setActiveVirtualIndex(0)
+    }
+  }, [virtualCount, activeVirtualIndex])
+
+  // Cleanup throttle timer on unmount
+  useEffect(() => {
+    return () => {
+      if (cooldownTimerRef.current) clearTimeout(cooldownTimerRef.current)
+    }
+  }, [])
+
+  const handleSelectVirtualCard = (vIdx, event, customDir = 'next') => {
+    if (isTransitioningRef.current) return
+    if (vIdx === safeVirtualActive || virtualCount < 2) return
+
+    // Lock transitions for 450ms to prevent spamming glitches
+    isTransitioningRef.current = true
+    if (cooldownTimerRef.current) clearTimeout(cooldownTimerRef.current)
+    cooldownTimerRef.current = setTimeout(() => {
+      isTransitioningRef.current = false
+      setIsEnteringPrev(false)
+    }, 450)
+
+    setDirection(customDir)
+    if (customDir === 'prev') {
+      setIsEnteringPrev(true)
+    } else {
+      setIsEnteringPrev(false)
+    }
+
+    if (event && event.currentTarget && event.currentTarget.closest('.carousel-property-card')) {
       const card = event.currentTarget.closest('.carousel-property-card')
       const carousel = document.getElementById('carousel-property')
       if (card && carousel) {
@@ -45,7 +180,7 @@ export default function Hero({ properties = [] }) {
       }
     } else {
       const topPct = 48.2
-      const leftPct = 66.4
+      const leftPct = customDir === 'prev' ? 62.0 : 70.0
       setExpandOrigin({
         top: `${topPct}%`,
         right: '18.2%',
@@ -55,20 +190,80 @@ export default function Hero({ properties = [] }) {
         originY: `${(topPct + 18).toFixed(1)}%`,
       })
     }
-    setLeavingIndex(activeIndex)
-    setPrevIndex(activeIndex)
-    setActiveIndex(propIdx)
+    setLeavingVirtualIndex(safeVirtualActive)
+    setPrevVirtualIndex(safeVirtualActive)
+    setActiveVirtualIndex(vIdx)
   }
 
-  // Carousel autoplay timer
+  // Carousel autoplay timer - active when 2 or more real properties exist
   useEffect(() => {
-    if (isPaused || properties.length === 0) return
+    if (isPaused || propCount < 2 || virtualCount < 2) return
     const timer = setInterval(() => {
-      const nextIdx = (activeIndex + 1) % properties.length
-      handleSelectProperty(nextIdx)
+      if (isTransitioningRef.current) return
+      setDirection('next')
+      setIsEnteringPrev(false)
+      isTransitioningRef.current = true
+      if (cooldownTimerRef.current) clearTimeout(cooldownTimerRef.current)
+      cooldownTimerRef.current = setTimeout(() => {
+        isTransitioningRef.current = false
+      }, 450)
+
+      setActiveVirtualIndex((curr) => {
+        const next = (curr + 1) % virtualCount
+        setLeavingVirtualIndex(curr)
+        setPrevVirtualIndex(curr)
+        return next
+      })
     }, 5000)
     return () => clearInterval(timer)
-  }, [activeIndex, isPaused, properties.length])
+  }, [isPaused, propCount, virtualCount])
+
+  const handleNext = (e) => {
+    if (virtualCount < 2 || isTransitioningRef.current) return
+    const nextVIdx = (safeVirtualActive + 1) % virtualCount
+    handleSelectVirtualCard(nextVIdx, e, 'next')
+  }
+
+  const handlePrev = (e) => {
+    if (virtualCount < 2 || isTransitioningRef.current) return
+    const prevVIdx = (safeVirtualActive - 1 + virtualCount) % virtualCount
+    handleSelectVirtualCard(prevVIdx, e, 'prev')
+  }
+
+  // Smart max-5 dots navigation based on real properties
+  const visibleDots = useMemo(() => {
+    if (propCount <= 1) return []
+    if (propCount <= 5) {
+      return Array.from({ length: propCount }, (_, i) => i)
+    }
+    // Max 5 dots: sliding window centered around realActiveIndex
+    let start = realActiveIndex - 2
+    if (start < 0) start = 0
+    if (start > propCount - 5) start = propCount - 5
+    return Array.from({ length: 5 }, (_, i) => start + i)
+  }, [propCount, realActiveIndex])
+
+  const handleSelectRealDot = (targetRealIdx, event) => {
+    if (targetRealIdx === realActiveIndex || isTransitioningRef.current) return
+    const dir = targetRealIdx < realActiveIndex ? 'prev' : 'next'
+
+    let bestVIdx = safeVirtualActive
+    let minDistance = Infinity
+
+    virtualQueue.forEach((vItem, vIdx) => {
+      if (vItem.originalIndex === targetRealIdx) {
+        const dist = dir === 'prev'
+          ? (safeVirtualActive - vIdx + virtualCount) % virtualCount
+          : (vIdx - safeVirtualActive + virtualCount) % virtualCount
+        if (dist > 0 && dist < minDistance) {
+          minDistance = dist
+          bestVIdx = vIdx
+        }
+      }
+    })
+
+    handleSelectVirtualCard(bestVIdx, event, dir)
+  }
 
   const handleCardMouseMove = (e) => {
     const card = e.currentTarget
@@ -98,9 +293,17 @@ export default function Hero({ properties = [] }) {
 
   return (
     <section className='home-page' id='home-page'>
+      {/* Background: Fallback to aboutBg if 0 properties, otherwise activeProperty image */}
+      {!activeProperty && (
+        <img
+          className='background-img'
+          src={aboutBg}
+          alt='C and J Real Estate'
+        />
+      )}
       {prevProperty && (
         <img
-          key={`prev-${prevProperty.id}`}
+          key={`prev-${prevProperty.id}-${prevVirtualIndex}`}
           className='background-img background-img-prev'
           src={prevProperty.image}
           alt=''
@@ -109,7 +312,7 @@ export default function Hero({ properties = [] }) {
       )}
       {activeProperty && (
         <img
-          key={`active-${activeProperty.id}`}
+          key={`active-${activeProperty.id}-${safeVirtualActive}`}
           className={`background-img ${prevProperty ? 'is-expanding' : ''}`}
           style={{
             '--clip-top': expandOrigin.top,
@@ -120,7 +323,7 @@ export default function Hero({ properties = [] }) {
             '--origin-y': expandOrigin.originY,
           }}
           src={activeProperty.image}
-          alt={activeProperty.location}
+          alt={formatLocation(activeProperty.location)}
         />
       )}
 
@@ -175,166 +378,172 @@ export default function Hero({ properties = [] }) {
         </div>
       </div>
 
-      {/* Hero Carousel */}
-      <div className='carousel-property' id='carousel-property'>
-        {properties.map((prop, propIdx) => {
-          const slotIdx = (propIdx - safeActiveIndex + properties.length) % properties.length
-          const isFeatured = slotIdx === 0
-          const isLeaving = propIdx === leavingIndex && !isFeatured
-          const slotClass = isFeatured
-            ? 'carousel-property-card is-featured'
-            : `carousel-property-card is-side ${isLeaving ? 'is-leaving' : ''}`
+      {/* Hero Carousel: Rendered whenever 1 or more properties exist */}
+      {propCount >= 1 && (
+        <div className='carousel-property' id='carousel-property'>
+          {virtualQueue.map((vCard, vIdx) => {
+            const slotIdx = (vIdx - safeVirtualActive + virtualCount) % virtualCount
+            const isFeatured = slotIdx === 0
+            const isLeaving = direction === 'next' && vIdx === leavingVirtualIndex && !isFeatured
+            const isSlotHidden = slotIdx >= 4
 
-          return (
-            <div
-              key={prop.id}
-              id={prop.id}
-              className={slotClass}
-              style={{ '--slot': slotIdx }}
-              onMouseEnter={() => {
-                if (isFeatured) setIsPaused(true)
-              }}
-              onMouseMove={handleCardMouseMove}
-              onMouseLeave={(e) => {
-                if (isFeatured) setIsPaused(false)
-                handleCardMouseLeave(e)
-              }}
-              onClick={(e) => {
-                setIsPaused(false)
-                handleCardMouseLeave(e)
-                if (isFeatured) {
-                  const target = document.getElementById(prop.propCardId) || document.getElementById('properties-page')
-                  if (target) {
-                    target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+            let slotClass = 'carousel-property-card'
+            if (isFeatured) {
+              slotClass += ' is-featured'
+              if (isEnteringPrev) {
+                slotClass += ' is-entering-prev'
+              }
+            } else {
+              slotClass += ' is-side'
+              if (isLeaving) slotClass += ' is-leaving'
+              if (isSlotHidden) slotClass += ' is-slot-hidden'
+            }
+
+            return (
+              <div
+                key={vCard.virtualId}
+                id={vCard.virtualId}
+                className={slotClass}
+                style={{ '--slot': slotIdx }}
+                onMouseEnter={() => {
+                  if (isFeatured) setIsPaused(true)
+                }}
+                onMouseMove={handleCardMouseMove}
+                onMouseLeave={(e) => {
+                  if (isFeatured) setIsPaused(false)
+                  handleCardMouseLeave(e)
+                }}
+                onClick={(e) => {
+                  setIsPaused(false)
+                  handleCardMouseLeave(e)
+                  if (isFeatured) {
+                    const target = document.getElementById(vCard.propCardId) || document.getElementById('properties-page')
+                    if (target) {
+                      target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                    }
+                  } else {
+                    handleSelectVirtualCard(vIdx, e, 'next')
                   }
-                } else {
-                  handleSelectProperty(propIdx, e)
-                }
-              }}
-            >
-              <div className='carousel-property-info'>
-                <span className='carousel-property-badge'>{prop.badge || prop.label || 'Clean Title'}</span>
-                <h4>{prop.location}</h4>
-                <hr className='carousel-property-line' />
-                <div className='carousel-property-footer'>
-                  <button
-                    type='button'
-                    className='carousel-property-btn'
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setIsPaused(false)
-                      const target = document.getElementById(prop.propCardId) || document.getElementById('properties-page')
-                      if (target) {
-                        target.scrollIntoView({ behavior: 'smooth', block: 'center' })
-                      }
-                    }}
-                  >
-                    View Details
-                  </button>
+                }}
+              >
+                <div className='carousel-property-info'>
+                  {(vCard.badge || vCard.label) && (
+                    <span className='carousel-property-badge'>{vCard.badge || vCard.label}</span>
+                  )}
+                  <h4>{formatLocation(vCard.location)}</h4>
+                  <hr className='carousel-property-line' />
+                  <div className='carousel-property-footer'>
+                    <button
+                      type='button'
+                      className='carousel-property-btn'
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setIsPaused(false)
+                        const target = document.getElementById(vCard.propCardId) || document.getElementById('properties-page')
+                        if (target) {
+                          target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                        }
+                      }}
+                    >
+                      View Details
+                    </button>
+                  </div>
+                </div>
+                <div className='carousel-property-media'>
+                  <img
+                    className='carousel-property-img'
+                    src={vCard.image}
+                    alt={formatLocation(vCard.location)}
+                  />
+                  {(() => {
+                    const rawProvince = vCard.province || (vCard.location ? vCard.location.split(',').pop().trim() : 'ESTATE')
+                    const lettersData = getVerticalProvinceLetters(rawProvince)
+                    return (
+                      <svg
+                        className='carousel-vertical-svg'
+                        viewBox='0 0 215 260'
+                        preserveAspectRatio='xMidYMid slice'
+                        aria-hidden='true'
+                      >
+                        <defs>
+                          <clipPath id={`text-clip-${vCard.virtualId}`}>
+                            {lettersData.letters.map((item, i) => (
+                              <text
+                                key={i}
+                                x={item.x}
+                                y={item.y}
+                                textAnchor='middle'
+                                dominantBaseline='central'
+                                className='carousel-clip-letter'
+                              >
+                                {item.char}
+                              </text>
+                            ))}
+                          </clipPath>
+                        </defs>
+                        <image
+                          className='carousel-clip-image'
+                          href={vCard.image}
+                          width='215'
+                          height='260'
+                          preserveAspectRatio='xMidYMid slice'
+                          clipPath={`url(#text-clip-${vCard.virtualId})`}
+                        />
+                        <g className='carousel-hover-letters'>
+                          {lettersData.letters.map((item, i) => (
+                            <text
+                              key={i}
+                              x={item.x}
+                              y={item.y}
+                              textAnchor='middle'
+                              dominantBaseline='central'
+                              className='carousel-hover-letter'
+                            >
+                              {item.char}
+                            </text>
+                          ))}
+                        </g>
+                      </svg>
+                    )
+                  })()}
                 </div>
               </div>
-              <div className='carousel-property-media'>
-                <img
-                  className='carousel-property-img'
-                  src={prop.image}
-                  alt={prop.location}
-                />
-                <svg
-                  className='carousel-vertical-svg'
-                  viewBox='0 0 215 260'
-                  preserveAspectRatio='xMidYMid slice'
-                  aria-hidden='true'
-                >
-                  <defs>
-                    <clipPath id={`text-clip-${prop.id}`}>
-                      {(prop.province || 'ESTATE').split('').map((char, i) => {
-                        const step = 25
-                        const startY = 30
-                        return (
-                          <text
-                            key={i}
-                            x='50'
-                            y={startY + i * step}
-                            textAnchor='middle'
-                            dominantBaseline='central'
-                            className='carousel-clip-letter'
-                          >
-                            {char}
-                          </text>
-                        )
-                      })}
-                    </clipPath>
-                  </defs>
-                  <image
-                    className='carousel-clip-image'
-                    href={prop.image}
-                    width='215'
-                    height='260'
-                    preserveAspectRatio='xMidYMid slice'
-                    clipPath={`url(#text-clip-${prop.id})`}
-                  />
-                  <g className='carousel-hover-letters'>
-                    {(prop.province || 'ESTATE').split('').map((char, i) => {
-                      const step = 25
-                      const startY = 30
-                      return (
-                        <text
-                          key={i}
-                          x='50'
-                          y={startY + i * step}
-                          textAnchor='middle'
-                          dominantBaseline='central'
-                          className='carousel-hover-letter'
-                        >
-                          {char}
-                        </text>
-                      )
-                    })}
-                  </g>
-                </svg>
-              </div>
-            </div>
-          )
-        })}
+            )
+          })}
 
-        <div className='carousel-nav' aria-label='Property carousel controls'>
-          <button
-            type='button'
-            className='carousel-arrow'
-            aria-label='Previous property'
-            onClick={(e) => {
-              if (properties.length === 0) return
-              const prevIdx = (safeActiveIndex - 1 + properties.length) % properties.length
-              handleSelectProperty(prevIdx, e)
-            }}
-          >
-            &#10094;
-          </button>
-          <div className='carousel-dots'>
-            {properties.map((prop, idx) => (
+          {propCount >= 2 && (
+            <div className='carousel-nav' aria-label='Property carousel controls'>
               <button
-                key={prop.id}
                 type='button'
-                className={`carousel-dot ${idx === safeActiveIndex ? 'is-active' : ''}`}
-                aria-label={`Select property ${idx + 1}`}
-                onClick={(e) => handleSelectProperty(idx, e)}
-              />
-            ))}
-          </div>
-          <button
-            type='button'
-            className='carousel-arrow'
-            aria-label='Next property'
-            onClick={(e) => {
-              if (properties.length === 0) return
-              const nextIdx = (safeActiveIndex + 1) % properties.length
-              handleSelectProperty(nextIdx, e)
-            }}
-          >
-            &#10095;
-          </button>
+                className='carousel-arrow'
+                aria-label='Previous property'
+                onClick={handlePrev}
+              >
+                &#10094;
+              </button>
+              <div className='carousel-dots'>
+                {visibleDots.map((realIdx) => (
+                  <button
+                    key={`dot-${realIdx}`}
+                    type='button'
+                    className={`carousel-dot ${realIdx === realActiveIndex ? 'is-active' : ''}`}
+                    aria-label={`Select property ${realIdx + 1}`}
+                    onClick={(e) => handleSelectRealDot(realIdx, e)}
+                  />
+                ))}
+              </div>
+              <button
+                type='button'
+                className='carousel-arrow'
+                aria-label='Next property'
+                onClick={handleNext}
+              >
+                &#10095;
+              </button>
+            </div>
+          )}
         </div>
-      </div>
+      )}
     </section>
   )
 }

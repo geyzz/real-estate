@@ -12,28 +12,27 @@ import { fetchAllProperties } from './lib/supabase'
 import './App.css'
 
 export default function App() {
+  // Reset old mock properties from local storage if resetting
   const [properties, setProperties] = useState(() => {
     try {
+      if (typeof window !== 'undefined' && localStorage.getItem('candj_clean_reset_v5') !== 'true') {
+        localStorage.removeItem('candj_properties_v1')
+        localStorage.setItem('candj_clean_reset_v5', 'true')
+        return []
+      }
       const local = localStorage.getItem('candj_properties_v1')
       if (local) {
         const parsed = JSON.parse(local)
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed
+        if (Array.isArray(parsed)) return parsed
       }
     } catch (e) {}
     return INITIAL_PROPERTIES
   })
 
   const [modalProperty, setModalProperty] = useState(null)
-  const [inquiredProperties, setInquiredProperties] = useState(() => {
-    try {
-      const local = localStorage.getItem('candj_properties_v1')
-      if (local) {
-        const parsed = JSON.parse(local)
-        if (Array.isArray(parsed) && parsed.length > 0) return [parsed[0].id]
-      }
-    } catch (e) {}
-    return [INITIAL_PROPERTIES[0].id]
-  })
+  
+  // Inquiry list starts completely empty (zero default picked property)
+  const [inquiredProperties, setInquiredProperties] = useState([])
 
   // Admin authentication state
   const [isAdmin, setIsAdmin] = useState(() => {
@@ -53,9 +52,8 @@ export default function App() {
   const loadProperties = async () => {
     try {
       const data = await fetchAllProperties()
-      if (data && data.length > 0) {
+      if (Array.isArray(data)) {
         setProperties(data)
-        setInquiredProperties((prev) => (prev.length === 0 ? [data[0].id] : prev))
       }
     } catch (err) {
       console.error('Failed to load properties from Supabase:', err)
@@ -131,7 +129,7 @@ export default function App() {
       </div>
 
       <main>
-        <AboutUs />
+        <AboutUs properties={properties} />
 
         {/* Public Properties Section: 100% clean for visitors, zero admin buttons */}
         <PropertiesSection

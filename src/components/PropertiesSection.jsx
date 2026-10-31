@@ -1,7 +1,10 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
+import { formatLocation } from '../lib/philippineGeo'
 
 const SLIDER_MIN = 500
 const SLIDER_MAX = 2500
+const ITEMS_PER_PAGE = 4
+const FEATURED_LIMIT = 4
 
 export default function PropertiesSection({
   properties = [],
@@ -9,10 +12,13 @@ export default function PropertiesSection({
   onInquire,
 }) {
   const [searchLocation, setSearchLocation] = useState('')
-  const [priceMin, setPriceMin] = useState(1000)
-  const [priceMax, setPriceMax] = useState(1600)
+  const [priceMin, setPriceMin] = useState(SLIDER_MIN)
+  const [priceMax, setPriceMax] = useState(SLIDER_MAX)
+  const [isPriceFilterActive, setIsPriceFilterActive] = useState(false)
   const [isLocationOpen, setIsLocationOpen] = useState(false)
   const [isPriceOpen, setIsPriceOpen] = useState(false)
+  const [isExpanded, setIsExpanded] = useState(false)
+  const [currentPage, setCurrentPage] = useState(1)
 
   const locationGroupRef = useRef(null)
   const priceGroupRef = useRef(null)
@@ -21,15 +27,15 @@ export default function PropertiesSection({
   const maxPercent = Math.min(100, Math.max(0, ((priceMax - SLIDER_MIN) / (SLIDER_MAX - SLIDER_MIN)) * 100))
   const isOverlapping = maxPercent - minPercent < 18
 
-  // Dynamic location options derived from current properties
+  // Dynamic location options derived from current properties formatted consistently in Proper Case
   const dynamicLocations = Array.from(
     new Set(
       properties
         .flatMap((p) => [
-          p.location,
-          p.municipality && p.province ? `${p.municipality}, ${p.province}` : null,
-          p.province,
-          p.municipality,
+          p.location ? formatLocation(p.location) : null,
+          p.municipality && p.province ? formatLocation(`${p.municipality}, ${p.province}`) : null,
+          p.province ? formatLocation(p.province) : null,
+          p.municipality ? formatLocation(p.municipality) : null,
         ])
         .filter(Boolean)
     )
@@ -53,27 +59,56 @@ export default function PropertiesSection({
       if (!locMatch) return false
     }
 
-    const propNumPrice = prop.listing_price || parseFloat(String(prop.price || '').replace(/[^\d.]/g, ''))
-    if (!isNaN(propNumPrice) && propNumPrice > 0) {
-      if (propNumPrice < priceMin || propNumPrice > priceMax) {
-        return false
+    if (isPriceFilterActive) {
+      const propNumPrice = prop.listing_price || parseFloat(String(prop.price || '').replace(/[^\d.]/g, ''))
+      if (!isNaN(propNumPrice) && propNumPrice > 0) {
+        if (propNumPrice < priceMin || propNumPrice > priceMax) {
+          return false
+        }
       }
     }
 
     return true
   })
 
+  const totalFiltered = filteredProperties.length
+  const totalPages = Math.ceil(totalFiltered / ITEMS_PER_PAGE)
+
+  // Reset pagination when search or price filter changes
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchLocation, priceMin, priceMax, isPriceFilterActive])
+
+  // Automatically reset expanded mode if properties drop to 4 or fewer
+  useEffect(() => {
+    if (totalFiltered <= FEATURED_LIMIT && isExpanded) {
+      setIsExpanded(false)
+      setCurrentPage(1)
+    }
+  }, [totalFiltered, isExpanded])
+
+  const displayedProperties = useMemo(() => {
+    if (!isExpanded) {
+      return filteredProperties.slice(0, FEATURED_LIMIT)
+    }
+    const start = (currentPage - 1) * ITEMS_PER_PAGE
+    return filteredProperties.slice(start, start + ITEMS_PER_PAGE)
+  }, [filteredProperties, isExpanded, currentPage])
+
   const handleMinSlider = (e) => {
+    setIsPriceFilterActive(true)
     const val = Math.min(Number(e.target.value), priceMax - 50)
     setPriceMin(val)
   }
 
   const handleMaxSlider = (e) => {
+    setIsPriceFilterActive(true)
     const val = Math.max(Number(e.target.value), priceMin + 50)
     setPriceMax(val)
   }
 
   const handleMinInput = (val) => {
+    setIsPriceFilterActive(true)
     if (val === '') {
       setPriceMin(SLIDER_MIN)
       return
@@ -85,6 +120,7 @@ export default function PropertiesSection({
   }
 
   const handleMaxInput = (val) => {
+    setIsPriceFilterActive(true)
     if (val === '') {
       setPriceMax(SLIDER_MAX)
       return
@@ -166,40 +202,38 @@ export default function PropertiesSection({
             </button>
           </div>
 
-          {isLocationOpen && (
-            <div className='search-dropdown-menu'>
-              <div className='search-dropdown-header'>Select or search location</div>
-              <div className='search-dropdown-list'>
-                {filteredLocationOptions.length > 0 ? (
-                  filteredLocationOptions.map((loc) => {
-                    const isSelected = searchLocation.trim().toLowerCase() === loc.toLowerCase()
-                    return (
-                      <button
-                        type='button'
-                        key={loc}
-                        className={`search-dropdown-item ${isSelected ? 'is-selected' : ''}`}
-                        onClick={() => {
-                          setSearchLocation(loc)
-                          setIsLocationOpen(false)
-                        }}
-                      >
-                        <span className='search-dropdown-item-title'>{loc}</span>
-                        {isSelected && (
-                          <svg className='search-dropdown-item-check' viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                            <polyline points="20 6 9 17 4 12" />
-                          </svg>
-                        )}
-                      </button>
-                    )
-                  })
-                ) : (
-                  <div className='search-dropdown-custom-notice'>
-                    <span>Filtering keyword: <strong>"{searchLocation}"</strong></span>
-                  </div>
-                )}
-              </div>
+          <div className={`search-dropdown-menu ${isLocationOpen ? 'is-open' : ''}`}>
+            <div className='search-dropdown-header'>Select or search location</div>
+            <div className='search-dropdown-list'>
+              {filteredLocationOptions.length > 0 ? (
+                filteredLocationOptions.map((loc) => {
+                  const isSelected = searchLocation.trim().toLowerCase() === loc.toLowerCase()
+                  return (
+                    <button
+                      type='button'
+                      key={loc}
+                      className={`search-dropdown-item ${isSelected ? 'is-selected' : ''}`}
+                      onClick={() => {
+                        setSearchLocation(loc)
+                        setIsLocationOpen(false)
+                      }}
+                    >
+                      <span className='search-dropdown-item-title'>{loc}</span>
+                      {isSelected && (
+                        <svg className='search-dropdown-item-check' viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                      )}
+                    </button>
+                  )
+                })
+              ) : (
+                <div className='search-dropdown-custom-notice'>
+                  <span>Filtering keyword: <strong>"{searchLocation}"</strong></span>
+                </div>
+              )}
             </div>
-          )}
+          </div>
         </div>
 
         <div className='search-divider'></div>
@@ -219,18 +253,19 @@ export default function PropertiesSection({
               type='text'
               readOnly
               placeholder='Pick price range...'
-              value={`₱${priceMin.toLocaleString()} – ₱${priceMax.toLocaleString()} / SQM`}
+              value={isPriceFilterActive ? `₱${priceMin.toLocaleString()} – ₱${priceMax.toLocaleString()} / SQM` : 'Any Price (All Available)'}
               style={{ cursor: 'pointer' }}
             />
-            {(priceMin !== 1000 || priceMax !== 1600) && (
+            {isPriceFilterActive && (
               <button
                 type='button'
                 className='search-combo-clear-btn'
                 aria-label='Reset price range'
                 onClick={(e) => {
                   e.stopPropagation()
-                  setPriceMin(1000)
-                  setPriceMax(1600)
+                  setIsPriceFilterActive(false)
+                  setPriceMin(SLIDER_MIN)
+                  setPriceMax(SLIDER_MAX)
                 }}
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
@@ -254,11 +289,10 @@ export default function PropertiesSection({
             </button>
           </div>
 
-          {isPriceOpen && (
-            <div
-              className='search-dropdown-menu price-slider-dropdown'
-              onClick={(e) => e.stopPropagation()}
-            >
+          <div
+            className={`search-dropdown-menu price-slider-dropdown ${isPriceOpen ? 'is-open' : ''}`}
+            onClick={(e) => e.stopPropagation()}
+          >
               <div className='price-slider-header-wrap'>
                 <div className='price-slider-eyebrow-row'>
                   <span className='price-slider-eyebrow'>Pricing Filter</span>
@@ -351,18 +385,20 @@ export default function PropertiesSection({
                 <div className='price-chips-group'>
                   <button
                     type='button'
-                    className={`price-preset-chip ${priceMin === 1000 && priceMax === 1600 ? 'is-active' : ''}`}
+                    className={`price-preset-chip ${isPriceFilterActive && priceMin === 1000 && priceMax === 1600 ? 'is-active' : ''}`}
                     onClick={() => {
+                      setIsPriceFilterActive(true)
                       setPriceMin(1000)
                       setPriceMax(1600)
                     }}
                   >
-                    All Featured
+                    ₱1.0k - ₱1.6k
                   </button>
                   <button
                     type='button'
-                    className={`price-preset-chip ${priceMin === 500 && priceMax === 1300 ? 'is-active' : ''}`}
+                    className={`price-preset-chip ${isPriceFilterActive && priceMin === 500 && priceMax === 1300 ? 'is-active' : ''}`}
                     onClick={() => {
+                      setIsPriceFilterActive(true)
                       setPriceMin(500)
                       setPriceMax(1300)
                     }}
@@ -371,8 +407,9 @@ export default function PropertiesSection({
                   </button>
                   <button
                     type='button'
-                    className={`price-preset-chip ${priceMin === 1500 && priceMax === 2500 ? 'is-active' : ''}`}
+                    className={`price-preset-chip ${isPriceFilterActive && priceMin === 1500 && priceMax === 2500 ? 'is-active' : ''}`}
                     onClick={() => {
+                      setIsPriceFilterActive(true)
                       setPriceMin(1500)
                       setPriceMax(2500)
                     }}
@@ -389,7 +426,6 @@ export default function PropertiesSection({
                 </button>
               </div>
             </div>
-          )}
         </div>
 
         {/* Search Action Button */}
@@ -416,8 +452,12 @@ export default function PropertiesSection({
       {/* Header */}
       <div className='prop-header'>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-          <span className='prop-eyebrow'>Featured Properties</span>
-          {(searchLocation || priceMin > 1000 || priceMax < 1600) && (
+          <span className='prop-eyebrow'>
+            <span key={isExpanded ? 'all' : 'featured'} className='prop-eyebrow-text'>
+              {isExpanded ? 'All Available Properties' : 'Featured Properties'}
+            </span>
+          </span>
+          {(searchLocation || isPriceFilterActive) && (
             <div className='prop-active-filter-badge'>
               <span>Filtered: {filteredProperties.length} of {properties.length} found</span>
               <button
@@ -425,8 +465,9 @@ export default function PropertiesSection({
                 className='prop-clear-filter-btn'
                 onClick={() => {
                   setSearchLocation('')
-                  setPriceMin(1000)
-                  setPriceMax(1600)
+                  setIsPriceFilterActive(false)
+                  setPriceMin(SLIDER_MIN)
+                  setPriceMax(SLIDER_MAX)
                 }}
               >
                 Reset Filter
@@ -434,12 +475,83 @@ export default function PropertiesSection({
             </div>
           )}
         </div>
-        <h2>Expansive Lots and Prime Estates Ready for Your Vision</h2>
+
+        <div className='prop-header-row'>
+          <h2>Expansive Lots and Prime Estates Ready for Your Vision</h2>
+          {(totalFiltered > FEATURED_LIMIT || properties.length > FEATURED_LIMIT) && (
+            <div
+              className={`prop-view-toggle ${isExpanded ? 'is-all-view' : 'is-featured-view'}`}
+              role='tablist'
+              aria-label='Properties display mode'
+            >
+              <div className='prop-view-toggle-slider' aria-hidden='true' />
+              <button
+                type='button'
+                role='tab'
+                aria-selected={!isExpanded}
+                className={`prop-view-pill ${!isExpanded ? 'is-active' : ''}`}
+                onClick={() => {
+                  setIsExpanded(false)
+                  setCurrentPage(1)
+                }}
+              >
+                <svg
+                  className='prop-view-pill-icon'
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                </svg>
+                <span className='prop-view-pill-label'>Featured</span>
+              </button>
+
+              <button
+                type='button'
+                role='tab'
+                aria-selected={isExpanded}
+                className={`prop-view-pill ${isExpanded ? 'is-active' : ''}`}
+                onClick={() => {
+                  setIsExpanded(true)
+                  setCurrentPage(1)
+                }}
+              >
+                <svg
+                  className='prop-view-pill-icon'
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <rect x="3" y="3" width="7" height="7" rx="1.5" />
+                  <rect x="14" y="3" width="7" height="7" rx="1.5" />
+                  <rect x="14" y="14" width="7" height="7" rx="1.5" />
+                  <rect x="3" y="14" width="7" height="7" rx="1.5" />
+                </svg>
+                <span className='prop-view-pill-label'>All Properties</span>
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Property Cards Grid */}
-      <div className='prop-grid'>
-        {filteredProperties.length === 0 ? (
+      <div className='prop-grid' key={`${isExpanded ? 'all' : 'featured'}-p${currentPage}`}>
+        {properties.length === 0 ? (
+          <div className='prop-no-results-card'>
+            <svg className='prop-no-results-icon' xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+              <polyline points="9 22 9 12 15 12 15 22" />
+            </svg>
+            <h3>No Properties Currently Listed</h3>
+            <p>New estate parcels and residential lots will appear here once added in the Admin Portal.</p>
+          </div>
+        ) : filteredProperties.length === 0 ? (
           <div className='prop-no-results-card'>
             <svg className='prop-no-results-icon' xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="11" cy="11" r="8" />
@@ -461,18 +573,21 @@ export default function PropertiesSection({
             </button>
           </div>
         ) : (
-          filteredProperties.map((prop) => (
+          displayedProperties.map((prop, idx) => (
             <div
               key={prop.id}
               className='prop-card'
               id={prop.propCardId || `prop-card-${prop.id}`}
-              style={{ backgroundImage: `url(${prop.image})` }}
+              style={{
+                backgroundImage: `url(${prop.image})`,
+                '--card-index': idx,
+              }}
             >
               <div
                 className='prop-photo-click-area'
                 role='button'
                 tabIndex={0}
-                aria-label={`View photo and details for ${prop.location}`}
+                aria-label={`View photo and details for ${formatLocation(prop.location)}`}
                 onClick={() => onSelectPropertyModal(prop)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') {
@@ -481,11 +596,13 @@ export default function PropertiesSection({
                   }
                 }}
               />
-              <span className='prop-badge'>{prop.badge || prop.label || 'Clean Title'}</span>
+              {(prop.badge || prop.label) && (
+                <span className='prop-badge'>{prop.badge || prop.label}</span>
+              )}
               <button
                 type='button'
                 className='prop-zoom-btn'
-                aria-label={`View details for ${prop.location}`}
+                aria-label={`View details for ${formatLocation(prop.location)}`}
                 onClick={(e) => {
                   e.stopPropagation()
                   onSelectPropertyModal(prop)
@@ -501,14 +618,14 @@ export default function PropertiesSection({
 
               <div className='prop-body' onClick={(e) => e.stopPropagation()}>
                 <div className='prop-details-top'>
-                  <h3 className='prop-location'>{prop.location}</h3>
-                  <p className='prop-subtitle'>{prop.subtitle || prop.main_info}</p>
-                  <p className='prop-specs'>{prop.specs || prop.sub_info}</p>
+                  <h3 className='prop-location'>{formatLocation(prop.location)}</h3>
+                  <p className='prop-subtitle'>{prop.subtitle || prop.main_info || '\u00A0'}</p>
+                  <p className='prop-specs'>{prop.specs || prop.sub_info || '\u00A0'}</p>
                 </div>
                 <div className='prop-footer'>
                   <div className='prop-price-row'>
                     <p className='prop-price'>{prop.price || prop.price_display}</p>
-                    <span className='prop-neg'>{prop.terms || 'Negotiable'}</span>
+                    {prop.terms && <span className='prop-neg'>{prop.terms}</span>}
                   </div>
                   <button
                     className='prop-card-btn'
@@ -523,6 +640,66 @@ export default function PropertiesSection({
           ))
         )}
       </div>
+
+      {/* Pagination Guidance Controls at bottom (when expanded & multiple pages exist) */}
+      {isExpanded && totalPages > 1 && (
+        <div className='prop-pagination-wrap'>
+          <div className='prop-pagination-bar' aria-label='Properties pagination guidance'>
+            <button
+              type='button'
+              className='prop-page-arrow'
+              aria-label='Previous page'
+              disabled={currentPage === 1}
+              onClick={() => {
+                if (currentPage > 1) {
+                  setCurrentPage((p) => p - 1)
+                  const el = document.querySelector('.prop-header')
+                  if (el) el.scrollIntoView({ behavior: 'smooth' })
+                }
+              }}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="15 18 9 12 15 6" />
+              </svg>
+            </button>
+
+            <div className='prop-page-numbers'>
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
+                <button
+                  key={`page-${pageNum}`}
+                  type='button'
+                  className={`prop-page-num ${pageNum === currentPage ? 'is-active' : ''}`}
+                  onClick={() => {
+                    setCurrentPage(pageNum)
+                    const el = document.querySelector('.prop-header')
+                    if (el) el.scrollIntoView({ behavior: 'smooth' })
+                  }}
+                >
+                  {pageNum}
+                </button>
+              ))}
+            </div>
+
+            <button
+              type='button'
+              className='prop-page-arrow'
+              aria-label='Next page'
+              disabled={currentPage === totalPages}
+              onClick={() => {
+                if (currentPage < totalPages) {
+                  setCurrentPage((p) => p + 1)
+                  const el = document.querySelector('.prop-header')
+                  if (el) el.scrollIntoView({ behavior: 'smooth' })
+                }
+              }}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="9 18 15 12 9 6" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
     </section>
   )
 }

@@ -1,5 +1,8 @@
 import { createClient } from '@supabase/supabase-js'
 import { INITIAL_PROPERTIES, PRESET_IMAGES } from '../data/initialProperties'
+import { toTitleCase, formatLocation } from './philippineGeo'
+
+export { toTitleCase, formatLocation }
 
 export const LOCAL_STORAGE_KEY = 'candj_properties_v1'
 export const SUPABASE_CREDS_KEY = 'candj_supabase_creds'
@@ -7,7 +10,7 @@ export const SUPABASE_CREDS_KEY = 'candj_supabase_creds'
 // Helper to retrieve credentials from env or local storage
 export const getSupabaseCredentials = () => {
   let url = import.meta.env.VITE_SUPABASE_URL || ''
-  let key = import.meta.env.VITE_SUPABASE_ANON_KEY || ''
+  let key = import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || ''
 
   if (!url || !key) {
     try {
@@ -96,23 +99,25 @@ export async function fetchAllProperties() {
 
   if (client) {
     try {
-      // 1. Try relational query (with province_id, municipality_id, barangay_id foreign keys)
+      // 1. Try relational query (with province_id, municipality_id, barangay_id, and property_sub_labels)
       const { data, error } = await client
         .from('properties')
         .select(`
           *,
           provinces (name),
           municipalities (name),
-          barangays (name)
+          barangays (name),
+          property_sub_labels (id, text, icon)
         `)
         .order('id', { ascending: false })
 
-      if (!error && data && data.length > 0) {
-        return data.map((p) => {
-          const provName = p.provinces?.name || p.province || ''
-          const munName = p.municipalities?.name || p.municipality || ''
-          const brgyName = p.barangays?.name || p.barangay || ''
-          const locationStr = `${brgyName ? brgyName + ', ' : ''}${munName ? munName + ', ' : ''}${provName}`
+      if (!error && Array.isArray(data)) {
+        const remoteProps = data.map((p) => {
+          const provName = toTitleCase(p.provinces?.name || p.province || '')
+          const munName = toTitleCase(p.municipalities?.name || p.municipality || '')
+          const brgyName = toTitleCase(p.barangays?.name || p.barangay || '')
+          const rawLocation = p.location || `${brgyName ? brgyName + ', ' : ''}${munName ? munName + ', ' : ''}${provName}`
+          const locationStr = formatLocation(rawLocation)
 
           return {
             ...p,
@@ -121,32 +126,71 @@ export async function fetchAllProperties() {
             municipality: munName,
             barangay: brgyName,
             location: locationStr,
-            badge: p.label || 'Clean Title',
-            subtitle: p.main_info,
+            badge: p.label || '',
+            subtitle: p.main_info || '',
             specs: p.sub_info || '',
-            price: p.price_display || `₱${Number(p.listing_price || 0).toLocaleString()} / SQM`,
+            price: p.price_display || (p.listing_price ? `₱${Number(p.listing_price).toLocaleString()} / SQM` : ''),
             image: p.image_url && PRESET_IMAGES[p.image_url] ? PRESET_IMAGES[p.image_url] : (p.image_url || resolvePropertyImage(p)),
-            sub_labels: p.property_sub_labels || [],
+            sub_labels: (p.property_sub_labels && p.property_sub_labels.length > 0)
+              ? p.property_sub_labels
+              : [],
           }
         })
+
+        try {
+          const local = localStorage.getItem(LOCAL_STORAGE_KEY)
+          if (local) {
+            const parsed = JSON.parse(local)
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              const missingLocals = parsed.filter(
+                (lp) => !remoteProps.some((rp) => String(rp.id) === String(lp.id))
+              )
+              if (missingLocals.length > 0) {
+                return [
+                  ...missingLocals.map((p) => ({
+                    ...p,
+                    location: formatLocation(p.location),
+                    province: toTitleCase(p.province),
+                    municipality: toTitleCase(p.municipality),
+                    barangay: toTitleCase(p.barangay),
+                    image: resolvePropertyImage(p),
+                  })),
+                  ...remoteProps,
+                ]
+              }
+            }
+          }
+        } catch (e) {}
+
+        return remoteProps
       } else if (error) {
         // Fallback to flat query if joins fail
         const { data: flatData, error: flatError } = await client
           .from('properties')
           .select('*')
-          .order('created_at', { ascending: false })
+          .order('id', { ascending: false })
 
-        if (!flatError && flatData && flatData.length > 0) {
-          return flatData.map((p) => ({
-            ...p,
-            propCardId: `prop-card-${p.id}`,
-            location: `${p.barangay ? p.barangay + ', ' : ''}${p.municipality || ''}, ${p.province || ''}`,
-            badge: p.label || 'Clean Title',
-            subtitle: p.main_info,
-            specs: p.sub_info || '',
-            price: p.price_display || `₱${Number(p.listing_price || 0).toLocaleString()} / SQM`,
-            image: p.image_url && PRESET_IMAGES[p.image_url] ? PRESET_IMAGES[p.image_url] : (p.image_url || resolvePropertyImage(p)),
-          }))
+        if (!flatError && Array.isArray(flatData)) {
+          return flatData.map((p) => {
+            const provName = toTitleCase(p.province || '')
+            const munName = toTitleCase(p.municipality || '')
+            const brgyName = toTitleCase(p.barangay || '')
+            const rawLocation = p.location || `${brgyName ? brgyName + ', ' : ''}${munName ? munName + ', ' : ''}${provName}`
+            return {
+              ...p,
+              propCardId: `prop-card-${p.id}`,
+              province: provName,
+              municipality: munName,
+              barangay: brgyName,
+              location: formatLocation(rawLocation),
+              badge: p.label || '',
+              subtitle: p.main_info || '',
+              specs: p.sub_info || '',
+              price: p.price_display || (p.listing_price ? `₱${Number(p.listing_price).toLocaleString()} / SQM` : ''),
+              image: p.image_url && PRESET_IMAGES[p.image_url] ? PRESET_IMAGES[p.image_url] : (p.image_url || resolvePropertyImage(p)),
+              sub_labels: [],
+            }
+          })
         }
       }
     } catch (err) {
@@ -162,6 +206,10 @@ export async function fetchAllProperties() {
       if (Array.isArray(parsed) && parsed.length > 0) {
         return parsed.map((p) => ({
           ...p,
+          location: formatLocation(p.location),
+          province: toTitleCase(p.province),
+          municipality: toTitleCase(p.municipality),
+          barangay: toTitleCase(p.barangay),
           image: resolvePropertyImage(p),
         }))
       }
@@ -258,17 +306,17 @@ export async function addProperty(newProp) {
 
       // 4. Insert into properties table
       const insertPayload = {
-        label: formatted.label || formatted.badge || 'Clean Title',
-        main_info: formatted.main_info || formatted.subtitle,
-        sub_info: formatted.sub_info || formatted.specs,
-        listing_price: formatted.listing_price,
-        price_display: formatted.price_display || formatted.price,
-        terms: formatted.terms || 'Negotiable',
+        label: formatted.label || formatted.badge || '',
+        main_info: formatted.main_info || formatted.subtitle || '',
+        sub_info: formatted.sub_info || formatted.specs || '',
+        listing_price: formatted.listing_price || 0,
+        price_display: formatted.price_display || formatted.price || '',
+        terms: formatted.terms || '',
         province_id,
         municipality_id,
         barangay_id,
         status: formatted.status || 'Available',
-        image_url: formatted.imageKey || formatted.image || 'property4',
+        image_url: formatted.imageKey || formatted.image || 'property1',
       }
 
       const { data, error } = await client
@@ -279,6 +327,20 @@ export async function addProperty(newProp) {
       if (!error && data && data[0]) {
         formatted.id = data[0].id
         formatted.propCardId = `prop-card-${data[0].id}`
+
+        // Insert sub_labels into property_sub_labels table
+        if (formatted.sub_labels && Array.isArray(formatted.sub_labels) && formatted.sub_labels.length > 0) {
+          try {
+            const subRows = formatted.sub_labels.map((s) => ({
+              property_id: data[0].id,
+              text: typeof s === 'string' ? s : s.text,
+              icon: typeof s === 'object' && s.icon ? s.icon : 'shield',
+            }))
+            await client.from('property_sub_labels').insert(subRows)
+          } catch (subErr) {
+            console.warn('Sub labels insert notice:', subErr)
+          }
+        }
       } else if (error) {
         console.error('Supabase relational insert error:', error)
       }
@@ -329,7 +391,10 @@ export async function updateProperty(propertyId, updatedData) {
           price: data[0].price_display,
           subtitle: data[0].main_info,
           specs: data[0].sub_info,
-          location: `${data[0].barangay ? data[0].barangay + ', ' : ''}${data[0].municipality || ''}, ${data[0].province || ''}`,
+          location: formatLocation(`${data[0].barangay ? data[0].barangay + ', ' : ''}${data[0].municipality || ''}, ${data[0].province || ''}`),
+          province: toTitleCase(data[0].province || ''),
+          municipality: toTitleCase(data[0].municipality || ''),
+          barangay: toTitleCase(data[0].barangay || ''),
         }
       }
     } catch (err) {
@@ -376,7 +441,9 @@ export async function deleteProperty(propertyId) {
     const local = localStorage.getItem(LOCAL_STORAGE_KEY)
     if (local) {
       const list = JSON.parse(local)
-      const updated = list.filter((p) => p.id !== propertyId)
+      const updated = list.filter(
+        (p) => String(p.id) !== String(propertyId) && String(p.propCardId) !== String(propertyId)
+      )
       localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated))
     }
   } catch (e) {

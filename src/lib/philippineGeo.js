@@ -49,7 +49,28 @@ export const findMunicipalityCodeByName = (munName, provCode) => {
   return found ? found.mun_code : null
 }
 
+// Formatting helper: Robust Title Case (Proper Case) for Province, Municipality, Barangay names
+export const toTitleCase = (str) => {
+  if (!str) return ''
+  return String(str)
+    .trim()
+    .toLowerCase()
+    .replace(/(?:^|\s|-|\/|\()\S/g, (match) => match.toUpperCase())
+}
+
+// Consistent Proper Case formatter for multi-part location strings (Barangay, Municipality, Province)
+export const formatLocation = (loc) => {
+  if (!loc) return ''
+  return String(loc)
+    .split(',')
+    .map((part) => toTitleCase(part.trim()))
+    .filter(Boolean)
+    .join(', ')
+}
+
 export default {
+  toTitleCase,
+  formatLocation,
   getProvinces,
   getMunicipalities,
   getBarangays,
