@@ -2,71 +2,43 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import aboutBg from '../assets/about-bg.jpg'
 import { formatLocation } from '../lib/philippineGeo'
 
-// Helper to format vertical province letters for non-featured carousel cards
-// Supports 1-column (e.g. BATAAN, PAMPANGA) and balanced 2-column (e.g. AGUSAN DEL SUR, ILOCOS SUR)
-function getVerticalProvinceLetters(provinceInput) {
-  const prov = String(provinceInput || 'ESTATE').trim().toUpperCase()
-  const words = prov.split(/\s+/).filter(Boolean)
 
-  if (words.length <= 1) {
-    const chars = (words[0] || 'ESTATE').split('')
-    const isLong = chars.length > 8
-    const step = isLong ? 23 : 25
-    const startY = isLong ? 24 : 30
-    return {
-      isTwoCol: false,
-      letters: chars.map((char, i) => ({
-        char,
-        x: 50,
-        y: startY + i * step,
-      })),
-    }
-  }
-
-  // Multi-word province (e.g. "AGUSAN DEL SUR", "NUEVA ECIJA", "ILOCOS SUR")
-  // Col 1: First word (e.g. "AGUSAN") at x=50 to align with all other cards
-  // Col 2: Remaining words joined by space (e.g. "DEL SUR", retaining the space between words)
-  const col1Chars = words[0].split('')
-  const col2Chars = words.slice(1).join(' ').split('')
-
-  const maxRows = Math.max(col1Chars.length, col2Chars.length)
-  const step = maxRows > 7 ? 23 : 25
-  const startY = maxRows > 7 ? 24 : 30
-  // Column 1 aligns at x=50 (exact alignment of the other cards in the carousel)
-  const x1 = 50
-  const x2 = 80
-
-  const letters = []
-
-  // Column 1
-  col1Chars.forEach((char, row) => {
-    if (char && char.trim()) {
-      letters.push({
-        char,
-        x: x1,
-        y: startY + row * step,
-        col: 1,
-      })
-    }
-  })
-
-  // Column 2
-  col2Chars.forEach((char, row) => {
-    if (char && char.trim()) {
-      letters.push({
-        char,
-        x: x2,
-        y: startY + row * step,
-        col: 2,
-      })
-    }
-  })
-
-  return {
-    isTwoCol: true,
-    letters,
-  }
-}
+const HERO_FEATURES = [
+  {
+    id: 'quality',
+    title: 'Quality Estates',
+    description: 'Ready-to-build residential lots and durable modern homes crafted for family comfort.',
+    icon: (
+      <svg className='icon-svg' xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M3 10.5L12 3l9 7.5" />
+        <path d="M5 9v11h14V9" />
+        <path d="M9 20v-6h6v6" />
+      </svg>
+    ),
+  },
+  {
+    id: 'locations',
+    title: 'Prime Locations',
+    description: 'Safe, accessible communities close to schools, markets, and daily essentials.',
+    icon: (
+      <svg className='icon-svg' xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 21s-7-6.5-7-12a7 7 0 1 1 14 0c0 5.5-7 12-7 12z" />
+        <circle cx="12" cy="9" r="2.5" />
+      </svg>
+    ),
+  },
+  {
+    id: 'trusted',
+    title: 'Trusted Ownership',
+    description: 'Verified clean titles, transparent pricing, and guided hassle-free turn-over.',
+    icon: (
+      <svg className='icon-svg' xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+        <path d="m9 12 2 2 4-4" />
+      </svg>
+    ),
+  },
+]
 
 export default function Hero({ properties = [] }) {
   const propCount = properties.length
@@ -115,6 +87,35 @@ export default function Hero({ properties = [] }) {
     originX: '75%',
     originY: '75%',
   })
+
+  // Mobile feature slider state & touch support
+  const [mobileFeatureIndex, setMobileFeatureIndex] = useState(0)
+  const featureTouchStartX = useRef(null)
+
+  const handlePrevFeature = () => {
+    setMobileFeatureIndex((prev) => (prev - 1 + HERO_FEATURES.length) % HERO_FEATURES.length)
+  }
+
+  const handleNextFeature = () => {
+    setMobileFeatureIndex((prev) => (prev + 1) % HERO_FEATURES.length)
+  }
+
+  const handleFeatureTouchStart = (e) => {
+    featureTouchStartX.current = e.touches[0].clientX
+  }
+
+  const handleFeatureTouchEnd = (e) => {
+    if (featureTouchStartX.current === null) return
+    const diffX = featureTouchStartX.current - e.changedTouches[0].clientX
+    if (Math.abs(diffX) > 35) {
+      if (diffX > 0) {
+        handleNextFeature()
+      } else {
+        handlePrevFeature()
+      }
+    }
+    featureTouchStartX.current = null
+  }
 
   const safeVirtualActive = virtualCount > 0 ? ((activeVirtualIndex % virtualCount) + virtualCount) % virtualCount : 0
   const realActiveIndex = virtualQueue[safeVirtualActive]?.originalIndex ?? 0
@@ -342,39 +343,62 @@ export default function Hero({ properties = [] }) {
         </button>
       </div>
 
-      <div className='abt-icons' id='abt-icons'>
-        <div className='icon'>
-          <svg className='icon-svg' xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M3 10.5L12 3l9 7.5" />
-            <path d="M5 9v11h14V9" />
-            <path d="M9 20v-6h6v6" />
+      <div
+        className='abt-icons'
+        id='abt-icons'
+        onTouchStart={handleFeatureTouchStart}
+        onTouchEnd={handleFeatureTouchEnd}
+      >
+        {/* Left Arrow (Mobile) */}
+        <button
+          type='button'
+          className='abt-icons-arrow abt-icons-arrow-left'
+          onClick={handlePrevFeature}
+          aria-label='Previous feature'
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="15 18 9 12 15 6" />
           </svg>
-          <div className='icon-text'>
-            <h3>Quality Estates</h3>
-            <p>Ready-to-build residential lots and durable modern homes crafted for family comfort.</p>
-          </div>
+        </button>
+
+        {/* Feature Cards Slider / Container */}
+        <div className='abt-icons-slider'>
+          {HERO_FEATURES.map((feat, idx) => (
+            <div
+              key={feat.id}
+              className={`icon ${idx === mobileFeatureIndex ? 'is-active-feature' : ''}`}
+            >
+              {feat.icon}
+              <div className='icon-text'>
+                <h3>{feat.title}</h3>
+                <p>{feat.description}</p>
+              </div>
+            </div>
+          ))}
         </div>
 
-        <div className='icon'>
-          <svg className='icon-svg' xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M12 21s-7-6.5-7-12a7 7 0 1 1 14 0c0 5.5-7 12-7 12z" />
-            <circle cx="12" cy="9" r="2.5" />
+        {/* Right Arrow (Mobile) */}
+        <button
+          type='button'
+          className='abt-icons-arrow abt-icons-arrow-right'
+          onClick={handleNextFeature}
+          aria-label='Next feature'
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="9 18 15 12 9 6" />
           </svg>
-          <div className='icon-text'>
-            <h3>Prime Locations</h3>
-            <p>Safe, accessible communities close to schools, markets, and daily essentials.</p>
-          </div>
-        </div>
+        </button>
 
-        <div className='icon'>
-          <svg className='icon-svg' xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-            <path d="m9 12 2 2 4-4" />
-          </svg>
-          <div className='icon-text'>
-            <h3>Trusted Ownership</h3>
-            <p>Verified clean titles, transparent pricing, and guided hassle-free turn-over.</p>
-          </div>
+        {/* Pagination Dots (Mobile) */}
+        <div className='abt-icons-dots'>
+          {HERO_FEATURES.map((_, idx) => (
+            <span
+              key={idx}
+              className={`abt-icons-dot ${idx === mobileFeatureIndex ? 'is-active' : ''}`}
+              onClick={() => setMobileFeatureIndex(idx)}
+              aria-label={`Go to slide ${idx + 1}`}
+            />
+          ))}
         </div>
       </div>
 
@@ -457,53 +481,10 @@ export default function Hero({ properties = [] }) {
                   />
                   {(() => {
                     const rawProvince = vCard.province || (vCard.location ? vCard.location.split(',').pop().trim() : 'ESTATE')
-                    const lettersData = getVerticalProvinceLetters(rawProvince)
                     return (
-                      <svg
-                        className='carousel-vertical-svg'
-                        viewBox='0 0 215 260'
-                        preserveAspectRatio='xMidYMid slice'
-                        aria-hidden='true'
-                      >
-                        <defs>
-                          <clipPath id={`text-clip-${vCard.virtualId}`}>
-                            {lettersData.letters.map((item, i) => (
-                              <text
-                                key={i}
-                                x={item.x}
-                                y={item.y}
-                                textAnchor='middle'
-                                dominantBaseline='central'
-                                className='carousel-clip-letter'
-                              >
-                                {item.char}
-                              </text>
-                            ))}
-                          </clipPath>
-                        </defs>
-                        <image
-                          className='carousel-clip-image'
-                          href={vCard.image}
-                          width='215'
-                          height='260'
-                          preserveAspectRatio='xMidYMid slice'
-                          clipPath={`url(#text-clip-${vCard.virtualId})`}
-                        />
-                        <g className='carousel-hover-letters'>
-                          {lettersData.letters.map((item, i) => (
-                            <text
-                              key={i}
-                              x={item.x}
-                              y={item.y}
-                              textAnchor='middle'
-                              dominantBaseline='central'
-                              className='carousel-hover-letter'
-                            >
-                              {item.char}
-                            </text>
-                          ))}
-                        </g>
-                      </svg>
+                      <div className='carousel-side-header'>
+                        <span className='carousel-side-province'>{rawProvince.toUpperCase()}</span>
+                      </div>
                     )
                   })()}
                 </div>

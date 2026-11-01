@@ -206,8 +206,8 @@ export default function Footer() {
           <div className='footer-contact-list'>
             <div className='footer-contact-item'>
               <span className='footer-contact-lbl'>Contact Info</span>
-              <a href='tel:09123456789' className='footer-contact-val'>
-                0912 345 6789
+              <a href='tel:+639123456789' className='footer-contact-val'>
+                +63 912 345 6789
               </a>
             </div>
 
