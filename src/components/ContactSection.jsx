@@ -3,9 +3,35 @@ import aboutBg from '../assets/about-bg.jpg'
 import { getSupabaseClient } from '../lib/supabase'
 import { sendInquiryEmail } from '../lib/emailService'
 import { formatLocation } from '../lib/philippineGeo'
+import {
+  validateEmail,
+  validatePhoneNumber,
+  formatFullPhoneNumber,
+} from '../lib/validation'
 
 const DRAWER_ITEMS_PER_PAGE = 4
 const DRAWER_MAX_PAGES = 4
+
+const COUNTRY_DIAL_CODES = [
+  { code: '+63', label: '+63 (PH)', placeholder: '912 345 6789' },
+  { code: '+1', label: '+1 (US)', placeholder: '202 555 0199' },
+  { code: '+971', label: '+971 (AE)', placeholder: '50 123 4567' },
+  { code: '+966', label: '+966 (SA)', placeholder: '50 123 4567' },
+  { code: '+65', label: '+65 (SG)', placeholder: '8123 4567' },
+  { code: '+852', label: '+852 (HK)', placeholder: '9123 4567' },
+  { code: '+81', label: '+81 (JP)', placeholder: '90 1234 5678' },
+  { code: '+61', label: '+61 (AU)', placeholder: '412 345 678' },
+  { code: '+44', label: '+44 (UK)', placeholder: '7911 123456' },
+  { code: '+974', label: '+974 (QA)', placeholder: '3312 3456' },
+  { code: '+39', label: '+39 (IT)', placeholder: '312 345 6789' },
+  { code: '+49', label: '+49 (DE)', placeholder: '151 23456789' },
+]
+
+const validateName = (name) => {
+  if (!name || !name.trim()) return 'Full name is required.'
+  if (name.trim().length < 2) return 'Please enter your full name.'
+  return ''
+}
 
 export default function ContactSection({
   properties = [],
@@ -17,6 +43,10 @@ export default function ContactSection({
   const [drawerPage, setDrawerPage] = useState(1)
   const [submittedStatus, setSubmittedStatus] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState('')
+  const [countryCode, setCountryCode] = useState('+63')
+  const [errors, setErrors] = useState({ name: '', email: '', contactNumber: '' })
+  const [touched, setTouched] = useState({ name: false, email: false, contactNumber: false })
   const [contactForm, setContactForm] = useState({
     name: '',
     email: '',
@@ -46,8 +76,26 @@ export default function ContactSection({
 
   const handleFormSubmit = async (e) => {
     e.preventDefault()
-    setIsSubmitting(true)
 
+    const nameErr = validateName(contactForm.name)
+    const emailErr = validateEmail(contactForm.email)
+    const phoneErr = validatePhoneNumber(contactForm.contactNumber, countryCode)
+
+    if (nameErr || emailErr || phoneErr) {
+      setErrors({ name: nameErr, email: emailErr, contactNumber: phoneErr })
+      setTouched({ name: true, email: true, contactNumber: true })
+      if (nameErr) {
+        document.getElementById('contact-name')?.focus()
+      } else if (emailErr) {
+        document.getElementById('contact-email')?.focus()
+      } else if (phoneErr) {
+        document.getElementById('contact-phone')?.focus()
+      }
+      return
+    }
+
+    setIsSubmitting(true)
+    const fullPhone = formatFullPhoneNumber(countryCode, contactForm.contactNumber)
     const selectedProps = properties.filter((p) => inquiredProperties.includes(p.id))
 
     // 1. Send direct email notification to ghayzelle.dzn@gmail.com
@@ -55,7 +103,7 @@ export default function ContactSection({
       await sendInquiryEmail({
         name: contactForm.name.trim(),
         email: contactForm.email.trim(),
-        contactNumber: contactForm.contactNumber.trim(),
+        contactNumber: fullPhone,
         message: contactForm.message.trim(),
         properties: selectedProps,
         formType: 'Direct Property Inquiry',
@@ -74,7 +122,7 @@ export default function ContactSection({
             {
               full_name: contactForm.name.trim(),
               email: contactForm.email.trim(),
-              contact_number: contactForm.contactNumber.trim(),
+              contact_number: fullPhone,
               message: contactForm.message.trim(),
               status: 'New',
             },
@@ -106,6 +154,9 @@ export default function ContactSection({
         contactNumber: '',
         message: '',
       })
+      setCountryCode('+63')
+      setErrors({ name: '', email: '', contactNumber: '' })
+      setTouched({ name: false, email: false, contactNumber: false })
     }, 4500)
   }
 
@@ -270,7 +321,7 @@ export default function ContactSection({
 
           {/* Right Column: Inquiry Form */}
           <div className='contact-form-col'>
-            <form className='contact-form-card' onSubmit={handleFormSubmit}>
+            <form className='contact-form-card' onSubmit={handleFormSubmit} noValidate>
               <div className='contact-form-heading'>
                 <h3>Send Inquiry</h3>
                 <p>Fill out the details below and our team will get back to you promptly.</p>
@@ -279,6 +330,12 @@ export default function ContactSection({
               {submittedStatus && (
                 <div className='contact-alert-success'>
                   ✓ Your inquiry for {inquiredProperties.length} property(s) has been submitted! Our representative will call or email you soon.
+                </div>
+              )}
+
+              {submitError && (
+                <div className='contact-alert-error'>
+                  {submitError}
                 </div>
               )}
 
@@ -291,8 +348,22 @@ export default function ContactSection({
                   placeholder='Enter your full name'
                   required
                   value={contactForm.name}
-                  onChange={handleFormChange}
+                  onChange={(e) => {
+                    handleFormChange(e)
+                    if (touched.name) {
+                      setErrors((prev) => ({ ...prev, name: validateName(e.target.value) }))
+                    }
+                  }}
+                  onBlur={() => {
+                    setTouched((prev) => ({ ...prev, name: true }))
+                    setErrors((prev) => ({ ...prev, name: validateName(contactForm.name) }))
+                  }}
+                  className={touched.name && errors.name ? 'has-error' : ''}
+                  aria-invalid={touched.name && !!errors.name}
                 />
+                {touched.name && errors.name && (
+                  <span className='contact-input-error'>{errors.name}</span>
+                )}
               </div>
 
               <div className='contact-form-group'>
@@ -304,21 +375,81 @@ export default function ContactSection({
                   placeholder='Enter your email address'
                   required
                   value={contactForm.email}
-                  onChange={handleFormChange}
+                  onChange={(e) => {
+                    handleFormChange(e)
+                    if (touched.email) {
+                      setErrors((prev) => ({ ...prev, email: validateEmail(e.target.value) }))
+                    }
+                  }}
+                  onBlur={() => {
+                    setTouched((prev) => ({ ...prev, email: true }))
+                    setErrors((prev) => ({ ...prev, email: validateEmail(contactForm.email) }))
+                  }}
+                  className={touched.email && errors.email ? 'has-error' : ''}
+                  aria-invalid={touched.email && !!errors.email}
                 />
+                {touched.email && errors.email && (
+                  <span className='contact-input-error'>{errors.email}</span>
+                )}
               </div>
 
               <div className='contact-form-group'>
                 <label htmlFor='contact-phone'>Contact Number</label>
-                <input
-                  id='contact-phone'
-                  type='tel'
-                  name='contactNumber'
-                  placeholder='Enter your contact number'
-                  required
-                  value={contactForm.contactNumber}
-                  onChange={handleFormChange}
-                />
+                <div className={`contact-phone-input-wrap ${touched.contactNumber && errors.contactNumber ? 'has-error' : ''}`}>
+                  <select
+                    className='contact-country-select'
+                    value={countryCode}
+                    onChange={(e) => {
+                      const newCode = e.target.value
+                      setCountryCode(newCode)
+                      if (touched.contactNumber) {
+                        setErrors((prev) => ({
+                          ...prev,
+                          contactNumber: validatePhoneNumber(contactForm.contactNumber, newCode),
+                        }))
+                      }
+                    }}
+                    aria-label='Country Dial Code'
+                  >
+                    {COUNTRY_DIAL_CODES.map((item) => (
+                      <option key={item.code} value={item.code}>
+                        {item.label}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    id='contact-phone'
+                    type='tel'
+                    name='contactNumber'
+                    placeholder={
+                      COUNTRY_DIAL_CODES.find((c) => c.code === countryCode)?.placeholder ||
+                      '912 345 6789'
+                    }
+                    required
+                    value={contactForm.contactNumber}
+                    onChange={(e) => {
+                      const sanitized = e.target.value.replace(/[^0-9\s\-()]/g, '')
+                      setContactForm((prev) => ({ ...prev, contactNumber: sanitized }))
+                      if (touched.contactNumber) {
+                        setErrors((prev) => ({
+                          ...prev,
+                          contactNumber: validatePhoneNumber(sanitized, countryCode),
+                        }))
+                      }
+                    }}
+                    onBlur={() => {
+                      setTouched((prev) => ({ ...prev, contactNumber: true }))
+                      setErrors((prev) => ({
+                        ...prev,
+                        contactNumber: validatePhoneNumber(contactForm.contactNumber, countryCode),
+                      }))
+                    }}
+                    aria-invalid={touched.contactNumber && !!errors.contactNumber}
+                  />
+                </div>
+                {touched.contactNumber && errors.contactNumber && (
+                  <span className='contact-input-error'>{errors.contactNumber}</span>
+                )}
               </div>
 
               <div className='contact-form-group'>
