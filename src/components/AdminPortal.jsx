@@ -582,7 +582,7 @@ export default function AdminPortal({
       {/* Top Admin Navbar */}
       <header className='admin-portal-header'>
         <div className='admin-header-brand'>
-          <span className='admin-gold-pill'>ADMIN PORTAL</span>
+          <span className='admin-brand-pill admin-gold-pill'>ADMIN PORTAL</span>
           <h1 className='admin-title'>C &amp; J Real Estate Management</h1>
         </div>
         <div className='admin-header-right'>
