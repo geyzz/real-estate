@@ -34,20 +34,35 @@ export default function App() {
   // Inquiry list starts completely empty (zero default picked property)
   const [inquiredProperties, setInquiredProperties] = useState([])
 
-  // Admin authentication state
+  // Admin authentication state - uses sessionStorage so it automatically logs out when the website/browser is closed
   const [isAdmin, setIsAdmin] = useState(() => {
-    return localStorage.getItem('candj_admin_auth') === 'true'
+    try {
+      localStorage.removeItem('candj_admin_auth') // purge legacy persistent storage
+      return sessionStorage.getItem('candj_admin_auth') === 'true'
+    } catch {
+      return false
+    }
   })
 
-  // Secret Admin Portal route - only accessible via direct link /admin or #admin
-  const [isAdminPortalOpen, setIsAdminPortalOpen] = useState(() => {
+  // Secret Admin Portal route - accessible via secret path/hash (#cj-portal, #portal-2026, #cj-manage, /cj-portal, or /admin)
+  const isSecretAdminRoute = () => {
+    if (typeof window === 'undefined') return false
+    const path = window.location.pathname.toLowerCase()
+    const hash = window.location.hash.toLowerCase()
+    const search = window.location.search.toLowerCase()
     return (
-      typeof window !== 'undefined' &&
-      (window.location.pathname === '/admin' ||
-        window.location.hash === '#admin' ||
-        window.location.search.includes('admin=true'))
+      path === '/admin' ||
+      path === '/cj-portal' ||
+      hash === '#admin' ||
+      hash === '#cj-portal' ||
+      hash === '#portal-2026' ||
+      hash === '#cj-manage' ||
+      search.includes('admin=true') ||
+      search.includes('portal=true')
     )
-  })
+  }
+
+  const [isAdminPortalOpen, setIsAdminPortalOpen] = useState(isSecretAdminRoute)
 
   const loadProperties = async () => {
     try {
@@ -64,14 +79,10 @@ export default function App() {
     loadProperties()
   }, [])
 
-  // Listen for direct URL navigation to /admin or #admin
+  // Listen for direct URL navigation to secret portal
   useEffect(() => {
     const checkAdminRoute = () => {
-      const isRoute =
-        window.location.pathname === '/admin' ||
-        window.location.hash === '#admin' ||
-        window.location.search.includes('admin=true')
-      setIsAdminPortalOpen(isRoute)
+      setIsAdminPortalOpen(isSecretAdminRoute())
     }
 
     checkAdminRoute()
@@ -81,6 +92,21 @@ export default function App() {
       window.removeEventListener('popstate', checkAdminRoute)
       window.removeEventListener('hashchange', checkAdminRoute)
     }
+  }, [])
+
+  // Secret hotkey shortcut (Ctrl + Alt + A or Ctrl + Shift + A) to open portal securely without typing URL in address bar
+  useEffect(() => {
+    const handleAdminHotKey = (e) => {
+      if (
+        (e.ctrlKey && e.altKey && e.key.toLowerCase() === 'a') ||
+        (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'a')
+      ) {
+        e.preventDefault()
+        setIsAdminPortalOpen((prev) => !prev)
+      }
+    }
+    window.addEventListener('keydown', handleAdminHotKey)
+    return () => window.removeEventListener('keydown', handleAdminHotKey)
   }, [])
 
   // Inquire action (adds to inquiry cart and scrolls down)
@@ -112,12 +138,8 @@ export default function App() {
 
   const handleCloseAdmin = () => {
     setIsAdminPortalOpen(false)
-    if (
-      window.location.pathname === '/admin' ||
-      window.location.hash === '#admin' ||
-      window.location.search.includes('admin=true')
-    ) {
-      window.history.pushState(null, '', window.location.pathname === '/admin' ? '/' : '#')
+    if (isSecretAdminRoute()) {
+      window.history.pushState(null, '', window.location.pathname.startsWith('/admin') || window.location.pathname.startsWith('/cj-portal') ? '/' : '#')
     }
   }
 

@@ -169,6 +169,15 @@ export default function AdminPortal({
   const [loginError, setLoginError] = useState('')
   const [deletingId, setDeletingId] = useState(null)
 
+  // Sort & Bulk Selection States
+  const [sortBy, setSortBy] = useState('default') // 'default' | 'price-asc' | 'price-desc' | 'location-asc' | 'location-desc'
+  const [isSortOpen, setIsSortOpen] = useState(false)
+  const sortRef = useRef(null)
+
+  const [selectedIds, setSelectedIds] = useState([])
+  const [isBulkDeleteOpen, setIsBulkDeleteOpen] = useState(false)
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false)
+
   // Form State - Truly clean initial states (no defaults)
   const [formId, setFormId] = useState(null)
   const [selectedProvCode, setSelectedProvCode] = useState('')
@@ -220,6 +229,17 @@ export default function AdminPortal({
     setProvincesList(provs)
   }, [])
 
+  // Close sort menu on click outside
+  useEffect(() => {
+    const handleSortOutside = (e) => {
+      if (sortRef.current && !sortRef.current.contains(e.target)) {
+        setIsSortOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleSortOutside)
+    return () => document.removeEventListener('mousedown', handleSortOutside)
+  }, [])
+
   const showToast = (msg) => {
     setToastMessage(msg)
     setTimeout(() => setToastMessage(''), 3500)
@@ -233,9 +253,10 @@ export default function AdminPortal({
       adminPassword.trim() === '1234'
     ) {
       setIsAdmin(true)
-      localStorage.setItem('candj_admin_auth', 'true')
+      sessionStorage.setItem('candj_admin_auth', 'true')
+      localStorage.removeItem('candj_admin_auth')
       setLoginError('')
-      showToast('Admin access granted')
+      showToast('Admin access granted (Session active)')
     } else {
       setLoginError('Invalid password. Hint: enter "candj2026" or "admin"')
     }
@@ -243,6 +264,7 @@ export default function AdminPortal({
 
   const handleLogout = () => {
     setIsAdmin(false)
+    sessionStorage.removeItem('candj_admin_auth')
     localStorage.removeItem('candj_admin_auth')
     showToast('Signed out of admin')
   }
@@ -555,7 +577,28 @@ export default function AdminPortal({
   const handleDelete = async (id, title) => {
     await deleteProperty(id)
     setDeletingId(null)
+    setSelectedIds((prev) => prev.filter((i) => i !== id))
     showToast(`Deleted listing: ${title}`)
+    if (onPropertiesUpdated) {
+      await onPropertiesUpdated()
+    }
+  }
+
+  // Bulk Delete Action
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) return
+    setIsBulkDeleting(true)
+    const count = selectedIds.length
+
+    for (const id of selectedIds) {
+      await deleteProperty(id)
+    }
+
+    setSelectedIds([])
+    setIsBulkDeleteOpen(false)
+    setIsBulkDeleting(false)
+    showToast(`Successfully deleted ${count} ${count === 1 ? 'property' : 'properties'}!`)
+
     if (onPropertiesUpdated) {
       await onPropertiesUpdated()
     }
@@ -563,30 +606,98 @@ export default function AdminPortal({
 
   if (!isOpen) return null
 
-  // Filter properties in table
-  const filteredTableProps = properties.filter((p) => {
-    if (!searchTerm.trim()) return true
-    const term = searchTerm.toLowerCase()
-    return (
-      (p.location && p.location.toLowerCase().includes(term)) ||
-      (p.province && p.province.toLowerCase().includes(term)) ||
-      (p.municipality && p.municipality.toLowerCase().includes(term)) ||
-      (p.barangay && p.barangay.toLowerCase().includes(term)) ||
-      (p.label && p.label.toLowerCase().includes(term)) ||
-      (p.main_info && p.main_info.toLowerCase().includes(term))
-    )
-  })
+  // Filter & Sort properties in table
+  const filteredTableProps = useMemo(() => {
+    let result = properties.filter((p) => {
+      if (!searchTerm.trim()) return true
+      const term = searchTerm.toLowerCase()
+      return (
+        (p.location && p.location.toLowerCase().includes(term)) ||
+        (p.province && p.province.toLowerCase().includes(term)) ||
+        (p.municipality && p.municipality.toLowerCase().includes(term)) ||
+        (p.barangay && p.barangay.toLowerCase().includes(term)) ||
+        (p.label && p.label.toLowerCase().includes(term)) ||
+        (p.main_info && p.main_info.toLowerCase().includes(term))
+      )
+    })
+
+    if (sortBy === 'price-asc') {
+      result.sort((a, b) => {
+        const pa = Number(a.listing_price || 0)
+        const pb = Number(b.listing_price || 0)
+        return pa - pb
+      })
+    } else if (sortBy === 'price-desc') {
+      result.sort((a, b) => {
+        const pa = Number(a.listing_price || 0)
+        const pb = Number(b.listing_price || 0)
+        return pb - pa
+      })
+    } else if (sortBy === 'location-asc') {
+      result.sort((a, b) => {
+        const locA = (a.barangay || a.location || '').toLowerCase()
+        const locB = (b.barangay || b.location || '').toLowerCase()
+        return locA.localeCompare(locB)
+      })
+    } else if (sortBy === 'location-desc') {
+      result.sort((a, b) => {
+        const locA = (a.barangay || a.location || '').toLowerCase()
+        const locB = (b.barangay || b.location || '').toLowerCase()
+        return locB.localeCompare(locA)
+      })
+    }
+
+    return result
+  }, [properties, searchTerm, sortBy])
+
+  // Select all logic
+  const allFilteredSelected =
+    filteredTableProps.length > 0 &&
+    filteredTableProps.every((p) => selectedIds.includes(p.id))
+
+  const someFilteredSelected =
+    filteredTableProps.some((p) => selectedIds.includes(p.id)) && !allFilteredSelected
+
+  const handleToggleSelectAll = () => {
+    if (allFilteredSelected) {
+      const filteredIdSet = new Set(filteredTableProps.map((p) => p.id))
+      setSelectedIds(selectedIds.filter((id) => !filteredIdSet.has(id)))
+    } else {
+      const newIds = new Set([...selectedIds, ...filteredTableProps.map((p) => p.id)])
+      setSelectedIds(Array.from(newIds))
+    }
+  }
+
+  const handleToggleRowSelect = (id) => {
+    if (selectedIds.includes(id)) {
+      setSelectedIds(selectedIds.filter((i) => i !== id))
+    } else {
+      setSelectedIds([...selectedIds, id])
+    }
+  }
+
+  const toggleLocationSort = () => {
+    if (sortBy === 'location-asc') setSortBy('location-desc')
+    else setSortBy('location-asc')
+  }
+
+  const togglePriceSort = () => {
+    if (sortBy === 'price-asc') setSortBy('price-desc')
+    else setSortBy('price-asc')
+  }
 
   return (
     <div className='admin-full-page-wrap'>
       {/* Top Admin Navbar */}
       <header className='admin-portal-header'>
         <div className='admin-header-brand'>
-          <div className='title admin-title-logo' aria-label='C and J Real Est.'>
+          <div className='title' id='title' onClick={onClose} title='Back to public website' role='button' tabIndex={0} aria-label='C and J Real Est.' style={{ cursor: 'pointer', transform: 'none' }}>
             <h3>C</h3>
-            <h3 className='rotate-title'>AND</h3>
+            <h3 className='rotate-title' id='rotate-title'>
+              AND
+            </h3>
             <h3>J</h3>
-            <div className='mix-font'>
+            <div className='mix-font' id='mix-font'>
               <h3>R</h3>
               <h3>eal Est.</h3>
             </div>
@@ -625,11 +736,13 @@ export default function AdminPortal({
         {!isAdmin ? (
           /* Authentication Screen */
           <div className='admin-login-card'>
-            <div className='title admin-login-title-logo' aria-label='C and J Real Est.'>
+            <div className='title' id='title' aria-label='C and J Real Est.' style={{ justifyContent: 'center', margin: '0 auto 20px auto', transform: 'none' }}>
               <h3>C</h3>
-              <h3 className='rotate-title'>AND</h3>
+              <h3 className='rotate-title' id='rotate-title'>
+                AND
+              </h3>
               <h3>J</h3>
-              <div className='mix-font'>
+              <div className='mix-font' id='mix-font'>
                 <h3>R</h3>
                 <h3>eal Est.</h3>
               </div>
@@ -656,7 +769,8 @@ export default function AdminPortal({
                   className='admin-btn-secondary'
                   onClick={() => {
                     setIsAdmin(true)
-                    localStorage.setItem('candj_admin_auth', 'true')
+                    sessionStorage.setItem('candj_admin_auth', 'true')
+                    localStorage.removeItem('candj_admin_auth')
                     showToast('Quick demo access granted')
                   }}
                 >
@@ -669,6 +783,93 @@ export default function AdminPortal({
           /* Simple Table View */
           <div className='admin-table-view-card'>
             <div className='admin-table-toolbar'>
+              <button
+                type='button'
+                className='admin-btn-add-property'
+                onClick={initAddForm}
+              >
+                + Add Property
+              </button>
+
+              {/* Sort Button & Dropdown */}
+              <div className='admin-sort-dropdown-wrap' ref={sortRef}>
+                <button
+                  type='button'
+                  className={`admin-btn-sort ${sortBy !== 'default' ? 'is-active' : ''}`}
+                  onClick={() => setIsSortOpen(!isSortOpen)}
+                  title='Sort listings'
+                >
+                  <span className='admin-btn-sort-icon'>⇅</span>
+                  <span>
+                    {sortBy === 'default' && 'Sort: Default'}
+                    {sortBy === 'location-asc' && 'Sort: Location (A → Z)'}
+                    {sortBy === 'location-desc' && 'Sort: Location (Z → A)'}
+                    {sortBy === 'price-asc' && 'Sort: Price (Low → High)'}
+                    {sortBy === 'price-desc' && 'Sort: Price (High → Low)'}
+                  </span>
+                  <span className='admin-sort-chevron'>▾</span>
+                </button>
+
+                {isSortOpen && (
+                  <div className='admin-sort-menu'>
+                    <div className='admin-sort-header'>Sort listings by</div>
+                    <button
+                      type='button'
+                      className={`admin-sort-option ${sortBy === 'default' ? 'selected' : ''}`}
+                      onClick={() => { setSortBy('default'); setIsSortOpen(false) }}
+                    >
+                      <span>Default Order</span>
+                      {sortBy === 'default' && <span className='admin-sort-check'>✓</span>}
+                    </button>
+                    <button
+                      type='button'
+                      className={`admin-sort-option ${sortBy === 'location-asc' ? 'selected' : ''}`}
+                      onClick={() => { setSortBy('location-asc'); setIsSortOpen(false) }}
+                    >
+                      <span>Location (A → Z)</span>
+                      {sortBy === 'location-asc' && <span className='admin-sort-check'>✓</span>}
+                    </button>
+                    <button
+                      type='button'
+                      className={`admin-sort-option ${sortBy === 'location-desc' ? 'selected' : ''}`}
+                      onClick={() => { setSortBy('location-desc'); setIsSortOpen(false) }}
+                    >
+                      <span>Location (Z → A)</span>
+                      {sortBy === 'location-desc' && <span className='admin-sort-check'>✓</span>}
+                    </button>
+                    <button
+                      type='button'
+                      className={`admin-sort-option ${sortBy === 'price-asc' ? 'selected' : ''}`}
+                      onClick={() => { setSortBy('price-asc'); setIsSortOpen(false) }}
+                    >
+                      <span>Price: Low to High</span>
+                      {sortBy === 'price-asc' && <span className='admin-sort-check'>✓</span>}
+                    </button>
+                    <button
+                      type='button'
+                      className={`admin-sort-option ${sortBy === 'price-desc' ? 'selected' : ''}`}
+                      onClick={() => { setSortBy('price-desc'); setIsSortOpen(false) }}
+                    >
+                      <span>Price: High to Low</span>
+                      {sortBy === 'price-desc' && <span className='admin-sort-check'>✓</span>}
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Bulk Delete Button when items selected */}
+              {selectedIds.length > 0 && (
+                <button
+                  type='button'
+                  className='admin-btn-bulk-delete'
+                  onClick={() => setIsBulkDeleteOpen(true)}
+                  title={`Delete ${selectedIds.length} selected listings`}
+                >
+                  🗑️ Delete Selected ({selectedIds.length})
+                </button>
+              )}
+
+              {/* Search Box */}
               <div className='admin-search-box'>
                 <svg className='admin-search-icon' viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
                   <circle cx="11" cy="11" r="8" />
@@ -691,20 +892,28 @@ export default function AdminPortal({
                   </button>
                 )}
               </div>
-              <button
-                type='button'
-                className='admin-btn-add-property'
-                onClick={initAddForm}
-              >
-                + Add Property
-              </button>
             </div>
 
-            <div className='admin-table-info-row' style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
-              <span>
-                Showing <strong>{filteredTableProps.length}</strong> active listing(s){' '}
-                {isSupabaseConfigured() ? 'in Supabase Database' : '(Saved in Browser Local Storage)'}
-              </span>
+            <div className='admin-table-info-row'>
+              <div className='admin-table-info-left'>
+                <span>
+                  Showing <strong>{filteredTableProps.length}</strong> active listing(s){' '}
+                  {isSupabaseConfigured() ? 'in Supabase Database' : '(Saved in Browser Local Storage)'}
+                </span>
+                {selectedIds.length > 0 && (
+                  <span className='admin-selection-pill'>
+                    <strong>{selectedIds.length}</strong> selected
+                    <button
+                      type='button'
+                      className='admin-selection-clear-btn'
+                      onClick={() => setSelectedIds([])}
+                      title='Deselect all'
+                    >
+                      Clear
+                    </button>
+                  </span>
+                )}
+              </div>
               {!isSupabaseConfigured() && (
                 <span className='admin-supabase-warning-pill' title='Supabase Anon Key is not set in .env yet'>
                   ⚠️ Supabase Not Connected (Add Anon Key)
@@ -716,19 +925,53 @@ export default function AdminPortal({
               <table className='admin-simple-table'>
                 <thead>
                   <tr>
+                    <th style={{ width: '46px', textAlign: 'center' }}>
+                      <input
+                        type='checkbox'
+                        className='admin-table-checkbox'
+                        aria-label='Select all properties'
+                        checked={allFilteredSelected}
+                        ref={(el) => {
+                          if (el) el.indeterminate = someFilteredSelected
+                        }}
+                        onChange={handleToggleSelectAll}
+                      />
+                    </th>
                     <th style={{ width: '80px' }}>Photo</th>
-                    <th>Location</th>
+                    <th
+                      className='admin-th-sortable'
+                      onClick={toggleLocationSort}
+                      title='Click to sort by Location'
+                    >
+                      <div className='admin-th-content'>
+                        <span>Location</span>
+                        <span className='admin-th-sort-arrow'>
+                          {sortBy === 'location-asc' ? '▲' : sortBy === 'location-desc' ? '▼' : '⇅'}
+                        </span>
+                      </div>
+                    </th>
                     <th>Label</th>
                     <th>Main Info</th>
                     <th>Sub Info</th>
-                    <th>Listing Price</th>
-                    <th style={{ width: '150px', textAlign: 'center' }}>Actions</th>
+                    <th
+                      className='admin-th-sortable'
+                      onClick={togglePriceSort}
+                      title='Click to sort by Listing Price'
+                    >
+                      <div className='admin-th-content'>
+                        <span>Listing Price</span>
+                        <span className='admin-th-sort-arrow'>
+                          {sortBy === 'price-asc' ? '▲' : sortBy === 'price-desc' ? '▼' : '⇅'}
+                        </span>
+                      </div>
+                    </th>
+                    <th style={{ width: '150px', textAlign: 'left' }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredTableProps.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className='admin-table-empty'>
+                      <td colSpan={8} className='admin-table-empty'>
                         {properties.length === 0
                           ? 'No properties in database yet. Click "+ Add Property" to create your first listing.'
                           : 'No properties found matching your search.'}
@@ -736,7 +979,16 @@ export default function AdminPortal({
                     </tr>
                   ) : (
                     filteredTableProps.map((prop) => (
-                      <tr key={prop.id}>
+                      <tr key={prop.id} className={selectedIds.includes(prop.id) ? 'admin-row-selected' : ''}>
+                        <td style={{ textAlign: 'center' }}>
+                          <input
+                            type='checkbox'
+                            className='admin-table-checkbox'
+                            aria-label={`Select property in ${prop.location || 'listing'}`}
+                            checked={selectedIds.includes(prop.id)}
+                            onChange={() => handleToggleRowSelect(prop.id)}
+                          />
+                        </td>
                         <td>
                           <img
                             src={prop.image}
@@ -793,9 +1045,9 @@ export default function AdminPortal({
                               <div className='admin-confirm-delete-box'>
                                 <span>Confirm?</span>
                                 <button
-                                  type='button'
-                                  className='admin-action-delete-confirm'
-                                  onClick={() => handleDelete(prop.id, prop.location)}
+                                   type='button'
+                                   className='admin-action-delete-confirm'
+                                   onClick={() => handleDelete(prop.id, prop.location)}
                                 >
                                   Yes
                                 </button>
@@ -825,6 +1077,38 @@ export default function AdminPortal({
                 </tbody>
               </table>
             </div>
+
+            {/* Bulk Delete Confirmation Modal */}
+            {isBulkDeleteOpen && (
+              <div className='admin-modal-overlay' role='dialog' aria-modal='true'>
+                <div className='admin-modal-card'>
+                  <div className='admin-modal-icon-danger'>⚠️</div>
+                  <h3 className='admin-modal-title'>Delete {selectedIds.length} Properties?</h3>
+                  <p className='admin-modal-text'>
+                    You are about to permanently delete <strong>{selectedIds.length}</strong> selected property listing{selectedIds.length > 1 ? 's' : ''}.
+                    This action removes the listings and images from Supabase and cannot be undone.
+                  </p>
+                  <div className='admin-modal-actions'>
+                    <button
+                      type='button'
+                      className='admin-modal-btn-cancel'
+                      onClick={() => setIsBulkDeleteOpen(false)}
+                      disabled={isBulkDeleting}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type='button'
+                      className='admin-modal-btn-delete'
+                      onClick={handleBulkDelete}
+                      disabled={isBulkDeleting}
+                    >
+                      {isBulkDeleting ? 'Deleting...' : `Yes, Delete ${selectedIds.length} Listing${selectedIds.length > 1 ? 's' : ''}`}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         ) : (
           /* Add / Edit Property Form View */

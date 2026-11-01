@@ -39,11 +39,13 @@ export default function Footer() {
         {/* Column 1: Logo & Brand Description */}
         <div className='footer-col footer-col-brand'>
           <div className='footer-logo-wrap'>
-            <div className='title footer-title'>
+            <div className='title footer-title' id='title'>
               <h3>C</h3>
-              <h3 className='rotate-title'>AND</h3>
+              <h3 className='rotate-title' id='rotate-title'>
+                AND
+              </h3>
               <h3>J</h3>
-              <div className='mix-font'>
+              <div className='mix-font' id='mix-font'>
                 <h3>R</h3>
                 <h3>eal Est.</h3>
               </div>

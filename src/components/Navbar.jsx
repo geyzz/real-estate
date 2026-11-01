@@ -32,11 +32,13 @@ export default function Navbar() {
       >
         <div className='floating-glass-inner'>
           <a href='#home-page' className='floating-logo-link'>
-            <div className='title floating-nav-title'>
+            <div className='title floating-nav-title' id='title'>
               <h3>C</h3>
-              <h3 className='rotate-title'>AND</h3>
+              <h3 className='rotate-title' id='rotate-title'>
+                AND
+              </h3>
               <h3>J</h3>
-              <div className='mix-font'>
+              <div className='mix-font' id='mix-font'>
                 <h3>R</h3>
                 <h3>eal Est.</h3>
               </div>
