@@ -31,8 +31,14 @@ function buildBrandedHtmlEmail({ name, email, contactNumber, message, properties
               <div style="color: #6B6861; font-size: 12.5px; margin-bottom: 8px;">
                 ${p.subtitle || p.main_info || ''} ${p.specs || p.sub_info ? '• ' + (p.specs || p.sub_info) : ''}
               </div>
-              <div style="display: inline-block; padding: 4px 10px; background: rgba(79, 109, 58, 0.1); color: #4F6D3A; border: 1px solid rgba(79, 109, 58, 0.22); border-radius: 999px; font-size: 12px; font-weight: 700; letter-spacing: 0.3px;">
-                Listing Rate: ${p.price || p.price_display || 'N/A'}
+              <div style="margin-top: 4px;">
+                <div style="display: inline-block; padding: 4px 10px; background: rgba(79, 109, 58, 0.1); color: #4F6D3A; border: 1px solid rgba(79, 109, 58, 0.22); border-radius: 999px; font-size: 12px; font-weight: 700; letter-spacing: 0.3px; margin-right: 6px; margin-bottom: 4px;">
+                  Listing Rate: ${p.price || p.price_display || 'N/A'}
+                </div>
+                ${p.terms ? `
+                <div style="display: inline-block; padding: 4px 10px; background: #FAF9F6; color: #6B6861; border: 1px solid rgba(61, 59, 54, 0.18); border-radius: 999px; font-size: 12px; font-weight: 600; letter-spacing: 0.2px; margin-bottom: 4px;">
+                  Payment Terms: ${p.terms}
+                </div>` : ''}
               </div>
             </div>
           `
@@ -52,41 +58,11 @@ function buildBrandedHtmlEmail({ name, email, contactNumber, message, properties
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Alegreya+SC:wght@700&family=Alegreya+Sans+SC:wght@700;800&family=Alegreya+Sans:wght@400;500;700&display=swap');
     
-    .title {
-      display: inline-flex !important;
-      align-items: center !important;
+    .email-brand-logo {
       font-family: 'Alegreya Sans SC', 'alegreya sans sc', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
-      font-size: 30px !important;
       color: #3D3B36 !important;
-      line-height: 1 !important;
-    }
-    .title h3 {
-      margin: 0 !important;
-      line-height: 1 !important;
-      display: inline-block !important;
-    }
-    .title > h3:nth-child(3) {
-      transform: translateX(-13px) !important;
-      -webkit-transform: translateX(-13px) !important;
-    }
-    .rotate-title {
-      transform: translateX(-7px) rotate(90deg) !important;
-      -webkit-transform: translateX(-7px) rotate(90deg) !important;
-      font-size: 15px !important;
-      color: #3D3B36 !important;
-      display: inline-block !important;
-    }
-    .mix-font {
-      display: inline-flex !important;
-      flex-direction: row !important;
-      align-items: center !important;
-      transform: translateX(-8px) !important;
-      -webkit-transform: translateX(-8px) !important;
-      font-size: 23px !important;
-    }
-    .mix-font > h3:first-child {
-      font-family: 'Alegreya SC', 'alegreya sc', Georgia, serif !important;
-      font-size: 27px !important;
+      line-height: 1.1 !important;
+      text-align: center !important;
     }
   </style>
 </head>
@@ -99,19 +75,14 @@ function buildBrandedHtmlEmail({ name, email, contactNumber, message, properties
         EXCLUSIVE INQUIRY
       </div>
       <!-- Header Title Logo matching Website Header -->
-      <div style="text-align: center; margin: 0 auto 8px auto;">
-        <div class="title" id="title" style="display: inline-flex; align-items: center; justify-content: center; font-family: 'Alegreya Sans SC', 'Segoe UI', Arial, sans-serif; font-size: 30px; color: #3D3B36; line-height: 1; text-align: center; margin: 0 auto;">
-          <h3 style="margin: 0; line-height: 1; font-family: 'Alegreya Sans SC', 'Segoe UI', Arial, sans-serif; font-size: 30px; font-weight: 800; color: #3D3B36; display: inline-block;">C</h3>
-          <h3 class="rotate-title" id="rotate-title" style="margin: 0; line-height: 1; font-family: 'Alegreya Sans SC', 'Segoe UI', Arial, sans-serif; font-size: 15px; font-weight: 800; color: #3D3B36; transform: translateX(-7px) rotate(90deg); -webkit-transform: translateX(-7px) rotate(90deg); display: inline-block;">
-            AND
-          </h3>
-          <h3 style="margin: 0; line-height: 1; font-family: 'Alegreya Sans SC', 'Segoe UI', Arial, sans-serif; font-size: 30px; font-weight: 800; color: #3D3B36; transform: translateX(-13px); -webkit-transform: translateX(-13px); display: inline-block;">J</h3>
-          <div class="mix-font" id="mix-font" style="display: inline-flex; flex-direction: row; align-items: center; transform: translateX(-8px); -webkit-transform: translateX(-8px); font-size: 23px; line-height: 1;">
-            <h3 style="margin: 0; line-height: 1; font-family: 'Alegreya SC', Georgia, serif; font-size: 27px; font-weight: 700; color: #3D3B36; display: inline-block;">R</h3>
-            <h3 style="margin: 0; line-height: 1; font-family: 'Alegreya Sans SC', 'Segoe UI', Arial, sans-serif; font-size: 23px; font-weight: 700; color: #3D3B36; display: inline-block;">eal Est.</h3>
-          </div>
-        </div>
-      </div>
+      <table role="presentation" border="0" cellpadding="0" cellspacing="0" align="center" style="margin: 0 auto 8px auto; text-align: center; border-collapse: collapse;">
+        <tr>
+          <td align="center" class="email-brand-logo" style="text-align: center; font-family: 'Alegreya Sans SC', 'alegreya sans sc', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 28px; font-weight: 800; color: #3D3B36; line-height: 1.1; white-space: nowrap; vertical-align: baseline;">
+            <span style="font-family: 'Alegreya Sans SC', 'alegreya sans sc', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 28px; font-weight: 800; color: #3D3B36; vertical-align: baseline;">C and J</span>
+            <span style="font-family: 'Alegreya SC', 'alegreya sc', Georgia, serif; font-size: 27px; font-weight: 700; color: #3D3B36; margin-left: 8px; vertical-align: baseline;">R</span><span style="font-family: 'Alegreya Sans SC', 'alegreya sans sc', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 23px; font-weight: 700; color: #3D3B36; vertical-align: baseline;">eal Est.</span>
+          </td>
+        </tr>
+      </table>
       <p style="margin: 6px 0 0 0; color: #6B6861; font-size: 13.5px; font-weight: 500;">
         Prime Land &amp; Verified Clean-Titled Estates
       </p>
@@ -123,7 +94,7 @@ function buildBrandedHtmlEmail({ name, email, contactNumber, message, properties
       <!-- Notification Banner -->
       <div style="background: rgba(79, 109, 58, 0.08); border-left: 4px solid #4F6D3A; padding: 12px 16px; border-radius: 6px; margin-bottom: 24px;">
         <span style="color: #4F6D3A; font-weight: 700; font-size: 13.5px;">
-          🔔 New Website Inquiry Received
+          New Website Inquiry Received
         </span>
         <div style="color: #6B6861; font-size: 12.5px; margin-top: 3px;">
           Submitted on ${submittedAt} (Philippine Standard Time)
@@ -168,7 +139,7 @@ function buildBrandedHtmlEmail({ name, email, contactNumber, message, properties
       <!-- Quick Action Button matching website pill CTA -->
       <div style="text-align: center; margin-bottom: 10px;">
         <a href="mailto:${email}?subject=Re:%20C%26J%20Real%20Estate%20Inquiry" style="display: inline-block; padding: 12px 32px; background: linear-gradient(180deg, #5E8146 0%, #4F6D3A 55%, #435E31 100%); color: #FFFFFF; font-weight: 800; font-size: 13px; letter-spacing: 0.8px; text-decoration: none; border-radius: 999px; text-transform: uppercase; box-shadow: 0 6px 18px rgba(79, 109, 58, 0.28);">
-          ✉️ Direct Reply to ${name}
+          Direct Reply to ${name}
         </a>
       </div>
 
