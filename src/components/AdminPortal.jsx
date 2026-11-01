@@ -727,7 +727,7 @@ export default function AdminPortal({
       {/* Toast Alert */}
       {toastMessage && (
         <div className='admin-toast-banner'>
-          <span>✨ {toastMessage}</span>
+          <span>{toastMessage}</span>
         </div>
       )}
 
@@ -747,7 +747,6 @@ export default function AdminPortal({
                 <h3>eal Est.</h3>
               </div>
             </div>
-            <div className='admin-login-lock-icon'>🔐</div>
             <h2>Superuser Authorization Required</h2>
             <p>Enter administrative credentials to manage lots and modify Supabase listings.</p>
             <form onSubmit={handleLogin} className='admin-login-form'>
@@ -865,7 +864,7 @@ export default function AdminPortal({
                   onClick={() => setIsBulkDeleteOpen(true)}
                   title={`Delete ${selectedIds.length} selected listings`}
                 >
-                  🗑️ Delete Selected ({selectedIds.length})
+                  Delete Selected ({selectedIds.length})
                 </button>
               )}
 
@@ -916,7 +915,7 @@ export default function AdminPortal({
               </div>
               {!isSupabaseConfigured() && (
                 <span className='admin-supabase-warning-pill' title='Supabase Anon Key is not set in .env yet'>
-                  ⚠️ Supabase Not Connected (Add Anon Key)
+                  Supabase Not Connected (Add Anon Key)
                 </span>
               )}
             </div>
@@ -1082,7 +1081,6 @@ export default function AdminPortal({
             {isBulkDeleteOpen && (
               <div className='admin-modal-overlay' role='dialog' aria-modal='true'>
                 <div className='admin-modal-card'>
-                  <div className='admin-modal-icon-danger'>⚠️</div>
                   <h3 className='admin-modal-title'>Delete {selectedIds.length} Properties?</h3>
                   <p className='admin-modal-text'>
                     You are about to permanently delete <strong>{selectedIds.length}</strong> selected property listing{selectedIds.length > 1 ? 's' : ''}.
@@ -1165,7 +1163,6 @@ export default function AdminPortal({
                 </div>
 
                 <div className='admin-location-pill-summary'>
-                  <span className='admin-loc-icon'>📍</span>
                   <span>
                     Selected Location:{' '}
                     <strong>
@@ -1404,7 +1401,7 @@ export default function AdminPortal({
               <div className='admin-form-section'>
                 <h3 className='admin-section-title'>4. Property Showcase Photograph</h3>
                 <p className='admin-section-desc'>
-                  All 4 preset drone photos are kept safe and preserved. You can click <strong>"💾 Save Photo"</strong> on any preset below to download it directly to your computer.
+                  All 4 preset drone photos are kept safe and preserved. You can click <strong>"Save Photo"</strong> on any preset below to download it directly to your computer.
                 </p>
 
                 <div className='admin-photograph-grid'>
@@ -1434,7 +1431,7 @@ export default function AdminPortal({
                         className='admin-save-photo-link'
                         onClick={(e) => e.stopPropagation()}
                       >
-                        💾 Save Photo
+                        Save Photo
                       </a>
                     </div>
                   </div>
@@ -1465,7 +1462,7 @@ export default function AdminPortal({
                         className='admin-save-photo-link'
                         onClick={(e) => e.stopPropagation()}
                       >
-                        💾 Save Photo
+                        Save Photo
                       </a>
                     </div>
                   </div>
@@ -1496,7 +1493,7 @@ export default function AdminPortal({
                         className='admin-save-photo-link'
                         onClick={(e) => e.stopPropagation()}
                       >
-                        💾 Save Photo
+                        Save Photo
                       </a>
                     </div>
                   </div>
@@ -1527,7 +1524,7 @@ export default function AdminPortal({
                         className='admin-save-photo-link'
                         onClick={(e) => e.stopPropagation()}
                       >
-                        💾 Save Photo
+                        Save Photo
                       </a>
                     </div>
                   </div>
@@ -1541,7 +1538,6 @@ export default function AdminPortal({
                       <img src={customImageData} alt='Custom Upload' className='admin-photo-thumb' />
                     ) : (
                       <div className='admin-upload-placeholder'>
-                        <span className='admin-upload-camera-icon'>📷</span>
                         <strong>Upload File</strong>
                         <span>Browse Local...</span>
                       </div>
@@ -1566,7 +1562,7 @@ export default function AdminPortal({
                           className='admin-save-photo-link'
                           onClick={(e) => e.stopPropagation()}
                         >
-                          💾 Save Photo
+                          Save Photo
                         </a>
                       )}
                     </div>
