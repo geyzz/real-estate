@@ -288,7 +288,7 @@ export default function ContactSection({
                   id='contact-name'
                   type='text'
                   name='name'
-                  placeholder='e.g. Maria Santos'
+                  placeholder='Enter your full name'
                   required
                   value={contactForm.name}
                   onChange={handleFormChange}
@@ -301,7 +301,7 @@ export default function ContactSection({
                   id='contact-email'
                   type='email'
                   name='email'
-                  placeholder='e.g. maria.santos@gmail.com'
+                  placeholder='Enter your email address'
                   required
                   value={contactForm.email}
                   onChange={handleFormChange}
@@ -314,7 +314,7 @@ export default function ContactSection({
                   id='contact-phone'
                   type='tel'
                   name='contactNumber'
-                  placeholder='e.g. +63 917 123 4567'
+                  placeholder='Enter your contact number'
                   required
                   value={contactForm.contactNumber}
                   onChange={handleFormChange}
@@ -327,7 +327,7 @@ export default function ContactSection({
                   id='contact-message'
                   name='message'
                   rows={4}
-                  placeholder='Tell us your preferred schedule for site viewing, questions regarding titles, or payment inquiries...'
+                  placeholder='Write your message or inquiry here...'
                   value={contactForm.message}
                   onChange={handleFormChange}
                 />
