@@ -582,8 +582,16 @@ export default function AdminPortal({
       {/* Top Admin Navbar */}
       <header className='admin-portal-header'>
         <div className='admin-header-brand'>
+          <div className='title admin-title-logo' aria-label='C and J Real Est.'>
+            <h3>C</h3>
+            <h3 className='rotate-title'>AND</h3>
+            <h3>J</h3>
+            <div className='mix-font'>
+              <h3>R</h3>
+              <h3>eal Est.</h3>
+            </div>
+          </div>
           <span className='admin-brand-pill admin-gold-pill'>ADMIN PORTAL</span>
-          <h1 className='admin-title'>C &amp; J Real Estate Management</h1>
         </div>
         <div className='admin-header-right'>
           <button
@@ -617,6 +625,15 @@ export default function AdminPortal({
         {!isAdmin ? (
           /* Authentication Screen */
           <div className='admin-login-card'>
+            <div className='title admin-login-title-logo' aria-label='C and J Real Est.'>
+              <h3>C</h3>
+              <h3 className='rotate-title'>AND</h3>
+              <h3>J</h3>
+              <div className='mix-font'>
+                <h3>R</h3>
+                <h3>eal Est.</h3>
+              </div>
+            </div>
             <div className='admin-login-lock-icon'>🔐</div>
             <h2>Superuser Authorization Required</h2>
             <p>Enter administrative credentials to manage lots and modify Supabase listings.</p>

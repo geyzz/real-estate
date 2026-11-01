@@ -55,9 +55,31 @@ function buildBrandedHtmlEmail({ name, email, contactNumber, message, properties
       <div style="display: inline-block; padding: 4px 14px; background: rgba(79, 109, 58, 0.1); border: 1px solid rgba(79, 109, 58, 0.25); border-radius: 999px; color: #4F6D3A; font-size: 11px; font-weight: 800; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 10px;">
         EXCLUSIVE INQUIRY
       </div>
-      <h1 style="margin: 0; color: #3D3B36; font-size: 24px; font-weight: 800; letter-spacing: 0.5px;">
-        C &amp; J Real Estate
-      </h1>
+      <!-- Header Title Logo matching Website Header -->
+      <table cellpadding="0" cellspacing="0" border="0" align="center" style="margin: 0 auto; border-collapse: collapse;">
+        <tr>
+          <!-- 'C' -->
+          <td valign="middle" style="padding: 0; line-height: 1; font-family: 'Alegreya Sans SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 32px; font-weight: 800; color: #3D3B36;">
+            C
+          </td>
+          <!-- 'AND' rotated / vertical text -->
+          <td valign="middle" style="padding: 0 5px; line-height: 1; text-align: center;">
+            <span style="display: inline-block; font-family: 'Alegreya Sans SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 11px; font-weight: 800; color: #3D3B36; letter-spacing: 1px; transform: rotate(90deg); -webkit-transform: rotate(90deg); -ms-transform: rotate(90deg);">AND</span>
+          </td>
+          <!-- 'J' -->
+          <td valign="middle" style="padding: 0 10px 0 0; line-height: 1; font-family: 'Alegreya Sans SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 32px; font-weight: 800; color: #3D3B36;">
+            J
+          </td>
+          <!-- 'R' (mix-font first letter, serif) -->
+          <td valign="middle" style="padding: 0; line-height: 1; font-family: 'Alegreya SC', Georgia, 'Times New Roman', serif; font-size: 29px; font-weight: 700; color: #3D3B36;">
+            R
+          </td>
+          <!-- 'eal Est.' -->
+          <td valign="middle" style="padding: 0; line-height: 1; font-family: 'Alegreya Sans SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 24px; font-weight: 700; color: #3D3B36;">
+            eal Est.
+          </td>
+        </tr>
+      </table>
       <p style="margin: 6px 0 0 0; color: #6B6861; font-size: 13.5px; font-weight: 500;">
         Prime Land &amp; Verified Clean-Titled Estates
       </p>

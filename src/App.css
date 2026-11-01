@@ -5478,7 +5478,49 @@ input::-webkit-calendar-picker-indicator {
 .admin-header-brand {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 16px;
+}
+
+.admin-title-logo {
+  transform: translate(0, 0) !important;
+  text-shadow: none !important;
+  font-size: 24px !important;
+  margin: 0 !important;
+  cursor: default;
+}
+
+.admin-title-logo .rotate-title {
+  font-size: 11px !important;
+  color: #3D3B36 !important;
+}
+
+.admin-title-logo .mix-font {
+  font-size: 18px !important;
+}
+
+.admin-title-logo .mix-font > h3:first-child {
+  font-size: 22px !important;
+}
+
+.admin-login-title-logo {
+  transform: translate(0, 0) !important;
+  text-shadow: none !important;
+  font-size: 28px !important;
+  justify-content: center;
+  margin: 0 auto 16px auto !important;
+}
+
+.admin-login-title-logo .rotate-title {
+  font-size: 13px !important;
+  color: #3D3B36 !important;
+}
+
+.admin-login-title-logo .mix-font {
+  font-size: 21px !important;
+}
+
+.admin-login-title-logo .mix-font > h3:first-child {
+  font-size: 25px !important;
 }
 
 .admin-header-brand .admin-gold-pill,
