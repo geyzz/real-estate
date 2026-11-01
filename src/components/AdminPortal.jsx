@@ -321,7 +321,7 @@ export default function AdminPortal({
     setSubInfoTags(parseChips(rawSub))
     setSubInfoInput('')
 
-    setListingPrice(prop.listing_price || '')
+    setListingPrice(prop.price || prop.price_display || (prop.listing_price ? String(prop.listing_price) : ''))
     setTerms(prop.terms || '')
 
     // Highlights
@@ -524,10 +524,14 @@ export default function AdminPortal({
     const finalMainInfo = allMain.join(' • ')
     const finalSubInfo = allSub.join(' • ')
 
-    const cleanPrice = listingPrice ? Number(listingPrice) : 0
-    const formattedPrice = cleanPrice > 0
-      ? `₱${cleanPrice.toLocaleString('en-US')} / SQM`
-      : ''
+    const rawPriceStr = String(listingPrice || '').trim()
+    const numericExtract = parseFloat(rawPriceStr.replace(/[^\d.]/g, ''))
+    const cleanNumericPrice = !isNaN(numericExtract) ? numericExtract : 0
+
+    let formattedPrice = rawPriceStr
+    if (rawPriceStr && !isNaN(Number(rawPriceStr))) {
+      formattedPrice = `₱${Number(rawPriceStr).toLocaleString('en-US')} / SQM`
+    }
 
     const cleanProv = toTitleCase(provinceName)
     const cleanMun = toTitleCase(municipalityName)
@@ -550,7 +554,7 @@ export default function AdminPortal({
       main_info: finalMainInfo,
       specs: finalSubInfo,
       sub_info: finalSubInfo,
-      listing_price: cleanPrice,
+      listing_price: cleanNumericPrice,
       price: formattedPrice,
       price_display: formattedPrice,
       terms: terms.trim(),
@@ -1291,16 +1295,13 @@ export default function AdminPortal({
                 {/* Listing Price & Terms */}
                 <div className='admin-price-row-grid'>
                   <div className='admin-field-group'>
-                    <label>Listing Price per SQM (₱)</label>
+                    <label>Listing Price per SQM</label>
                     <input
-                      type='number'
-                      min='100'
-                      max='100000'
-                      step='50'
+                      type='text'
                       value={listingPrice}
-                      onChange={(e) => setListingPrice(Number(e.target.value))}
+                      onChange={(e) => setListingPrice(e.target.value)}
+                      placeholder='e.g. 1,500, ₱1,500 / SQM, or Negotiable'
                       className='admin-input'
-                      required
                     />
                   </div>
                   <div className='admin-field-group'>

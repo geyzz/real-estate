@@ -4905,18 +4905,6 @@ input::-webkit-calendar-picker-indicator {
   box-shadow: 0 0 8px #4F6D3A;
 }
 
-.admin-logout-btn {
-  background: none;
-  border: none;
-  color: #DC2626;
-  font-size: 12px;
-  font-family: 'Alegreya Sans SC', sans-serif;
-  font-weight: 700;
-  cursor: pointer;
-  text-decoration: underline;
-  padding: 2px 6px;
-}
-
 /* Listings Tab */
 .admin-listings-toolbar {
   display: flex;
@@ -5537,21 +5525,30 @@ input::-webkit-calendar-picker-indicator {
 }
 
 .admin-logout-btn {
-  padding: 8px 16px;
-  background: transparent;
-  color: #8C8880;
-  border: 1px solid rgba(61, 59, 54, 0.18);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 9px 20px;
+  background: #FFFFFF;
+  color: #6B6861;
+  border: 1.5px solid rgba(61, 59, 54, 0.25);
   border-radius: 999px;
-  font-size: 12px;
-  font-weight: 700;
+  font-family: 'Alegreya Sans SC', sans-serif;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  text-decoration: none;
   cursor: pointer;
+  box-shadow: 0 2px 6px rgba(45, 42, 38, 0.04);
   transition: all 0.2s ease;
 }
 
 .admin-logout-btn:hover {
-  color: #DC2626;
+  color: #FFFFFF;
   border-color: #DC2626;
-  background: rgba(220, 38, 38, 0.06);
+  background: #DC2626;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.25);
 }
 
 .admin-container {
